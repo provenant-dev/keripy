@@ -8,6 +8,10 @@ import datetime
 import json
 from ordered_set import OrderedSet as oset
 
+import base64
+# from cryptography.hazmat.primitives import serialization
+# from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+
 import falcon
 import mnemonic
 from falcon import media
@@ -724,6 +728,62 @@ class IdentifierEnd(doing.DoDoer):
 
             yield self.tock
 
+    def on_get_pri(self, _, rep, alias=None):
+        """ Identifier GET endpoint
+
+        Parameters:
+            _: falcon.Request HTTP request
+            rep: falcon.Response HTTP response
+            alias: option route parameter for specific identifier to get
+
+        ---
+        summary:  Get identifier siging key
+        description:  Get identifier siging key
+        tags:
+           - Identifiers
+        parameters:
+          - in: path
+            name: alias
+            schema:
+              type: string
+            required: true
+            description: Human readable alias for the identifier to get
+        responses:
+            200:
+              description: An array of Identifier key state information
+              content:
+                  application/json:
+                    schema:
+                        description: Key state information for current identifiers
+                        type: object
+                        properties:
+                           priv_key:
+                                 description: current signing key
+                                 type: string                        
+        """
+        hab = self.hby.habByName(alias)
+        if hab is None:
+            raise falcon.HTTPNotFound(description=f"no identifier for alias {alias}")        
+
+        
+        signer = hab.ks.pris.get(hab.kever.verfers[0].qb64,
+                                         decrypter=hab.mgr.decrypter)
+        
+        encoded_str = base64.urlsafe_b64encode(signer.raw).decode("utf-8")
+        
+        # sigkey = ed25519.Ed25519PrivateKey.from_private_bytes(signer.raw)
+        # private_bytes = sigkey.private_bytes(encoding=serialization.Encoding.Raw,
+        #      format=serialization.PrivateFormat.Raw,
+        #      encryption_algorithm=serialization.NoEncryption())
+
+       
+        data = dict(
+            key=encoded_str
+        )
+
+        rep.status = falcon.HTTP_200
+        rep.content_type = "application/json"
+        rep.data = json.dumps(data).encode("utf-8")
 
 class KeyStateEnd:
 
@@ -4080,6 +4140,7 @@ def loadEnds(app, *,
     app.add_route("/ids/{alias}/metadata", identifierEnd, suffix="metadata")
     app.add_route("/ids/{alias}/rot", identifierEnd, suffix="rot")
     app.add_route("/ids/{alias}/ixn", identifierEnd, suffix="ixn")
+    app.add_route("/ids/{alias}/pri", identifierEnd, suffix="pri")
 
     keyEnd = KeyStateEnd(hby=hby, counselor=counselor)
     app.add_route("/keystate/{prefix}", keyEnd)
