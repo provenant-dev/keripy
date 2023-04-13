@@ -769,7 +769,8 @@ class IdentifierEnd(doing.DoDoer):
         signer = hab.ks.pris.get(hab.kever.verfers[0].qb64,
                                          decrypter=hab.mgr.decrypter)
         
-        encoded_str = base64.urlsafe_b64encode(signer.raw).decode("utf-8")
+        verkey_encoded_str = base64.urlsafe_b64encode(hab.kever.verfers[0].raw).decode("utf-8")
+        signkey_encoded_str = base64.urlsafe_b64encode(signer.raw).decode("utf-8")
         
         # sigkey = ed25519.Ed25519PrivateKey.from_private_bytes(signer.raw)
         # private_bytes = sigkey.private_bytes(encoding=serialization.Encoding.Raw,
@@ -778,7 +779,8 @@ class IdentifierEnd(doing.DoDoer):
 
        
         data = dict(
-            key=encoded_str
+            sign_key=signkey_encoded_str,
+            ver_key=verkey_encoded_str
         )
 
         rep.status = falcon.HTTP_200
