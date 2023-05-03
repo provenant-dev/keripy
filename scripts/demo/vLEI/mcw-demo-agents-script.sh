@@ -9,11 +9,11 @@
 echo "KERI_SCRIPT_DIR=" +${KERI_SCRIPT_DIR}
 echo "KERI_DEMO_SCRIPT_DIR=" +${KERI_DEMO_SCRIPT_DIR}
 # Alias variables
-GLEIF_AID_ALIAS="gleif"
-PROVENANT_QVI_AID_ALIAS="provenant-qvi"
-PROVENANT_VETTER_AID_ALIAS="provenant-vetter"
-SYNIVERSE_AID_ALIAS="syniverse"
-BRAND_AID_ALIAS="brand"
+GLEIF_AID_ALIAS="GLEIF"
+PROVENANT_QVI_AID_ALIAS="Provenant"
+PROVENANT_VETTER_AID_ALIAS="Aegis"
+SYNIVERSE_AID_ALIAS="Twilio"
+BRAND_AID_ALIAS="Subway"
 # Registry variables
 GLEIF_AID_REGISTRY="gleif-registry"
 PROVENANT_QVI_AID_REGISTRY="provenant-qvi-registry"
@@ -42,8 +42,13 @@ echo ">> Create Provenant-QVI AID"
 PROVENANT_QVI_AID=$(curl -s -X POST "http://localhost:5627/ids/$PROVENANT_QVI_AID_ALIAS" -H "accept: */*" -H "Content-Type: application/json" -d "{\"transferable\":true,\"wits\":[\"BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha\", \"BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM\",\"BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX\"],\"toad\":3, \"icount\":1,\"ncount\":1,\"isith\":1,\"nsith\":1}" | jq -r '.d' )
 echo "PROVENANT_QVI_AID : $PROVENANT_QVI_AID"
 
-echo ">> Create Provenant-Vetter AID"
-PROVENANT_VETTER_AID=$(curl -s -X POST "http://localhost:5627/ids/$PROVENANT_VETTER_AID_ALIAS" -H "accept: */*" -H "Content-Type: application/json" -d "{\"transferable\":true,\"wits\":[\"BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha\", \"BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM\",\"BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX\"],\"toad\":3, \"icount\":1,\"ncount\":1,\"isith\":1,\"nsith\":1}" | jq -r '.d' )
+echo ">> create/unlock Aegis wallet"
+curl -s -X POST "http://localhost:5626/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Aegis\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\",\"salt\":\"0ADnyq1zR3jSQmB45v5GkiVt\"}" | jq
+sleep 1
+curl -s -X PUT "http://localhost:5626/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Aegis\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq
+sleep 5
+echo ">> Create Aegis AID"
+PROVENANT_VETTER_AID=$(curl -s -X POST "http://localhost:5626/ids/$PROVENANT_VETTER_AID_ALIAS" -H "accept: */*" -H "Content-Type: application/json" -d "{\"transferable\":true,\"wits\":[\"BBilc4-L3tFUnfM_wJr4S4OJanAv_VmF_dJNN6vkf2Ha\", \"BLskRTInXnMxWaGqcpSyMgo0nYbalW99cGZESrz3zapM\",\"BIKKuvBwpmDVA4Ds-EpL5bt9OqPzWPja2LigFYZN2YfX\"],\"toad\":3, \"icount\":1,\"ncount\":1,\"isith\":1,\"nsith\":1}" | jq -r '.d' )
 echo "PROVENANT_VETTER_AID : $PROVENANT_VETTER_AID"
 
 echo "create/unlock Syniverse wallet"
@@ -70,7 +75,7 @@ echo 'create registries'
 sleep 3
 curl -s -X POST "http://localhost:5625/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$GLEIF_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$GLEIF_AID_REGISTRY\",\"noBackers\":true,\"toad\":0}" | jq
 curl -s -X POST "http://localhost:5627/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$PROVENANT_QVI_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$PROVENANT_QVI_AID_REGISTRY\",\"noBackers\":true,\"toad\":0}" | jq
-curl -s -X POST "http://localhost:5627/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$PROVENANT_VETTER_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$PROVENANT_VETTER_AID_REGISTRY\",\"noBackers\":true,\"toad\":0}" | jq
+curl -s -X POST "http://localhost:5626/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$PROVENANT_VETTER_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$PROVENANT_VETTER_AID_REGISTRY\",\"noBackers\":true,\"toad\":0}" | jq
 curl -s -X POST "http://localhost:5628/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$SYNIVERSE_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$SYNIVERSE_AID_REGISTRY\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\",\"noBackers\":true,\"toad\":0}" | jq
 curl -s -X POST "http://localhost:5629/registries" -H "accept: */*" -H "Content-Type: application/json" -d "{\"alias\":\"$BRAND_AID_ALIAS\",\"baks\":[],\"estOnly\":false,\"name\":\"$BRAND_AID_REGISTRY\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\",\"noBackers\":true,\"toad\":0}" | jq
 sleep 5
@@ -90,7 +95,7 @@ curl -s -X POST "http://localhost:5629/oobi" -H "accept: */*" -H "Content-Type: 
 
 echo 'Resolving Provenant-QVI oobi'
 curl -s -X POST "http://localhost:5625/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$PROVENANT_QVI_AID_ALIAS\", \"url\":\"$PROVENANT_QVI_AID_OOBI\"}" | jq
-curl -s -X POST "http://localhost:5627/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$PROVENANT_QVI_AID_ALIAS\", \"url\":\"$PROVENANT_QVI_AID_OOBI\"}" | jq
+curl -s -X POST "http://localhost:5626/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$PROVENANT_QVI_AID_ALIAS\", \"url\":\"$PROVENANT_QVI_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5628/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$PROVENANT_QVI_AID_ALIAS\", \"url\":\"$PROVENANT_QVI_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5629/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$PROVENANT_QVI_AID_ALIAS\", \"url\":\"$PROVENANT_QVI_AID_OOBI\"}" | jq
 
@@ -104,12 +109,14 @@ echo 'Resolving Syniverse oobi'
 sleep 3
 curl -s -X POST "http://localhost:5625/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$SYNIVERSE_AID_ALIAS\", \"url\":\"$SYNIVERSE_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5627/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$SYNIVERSE_AID_ALIAS\", \"url\":\"$SYNIVERSE_AID_OOBI\"}" | jq
+curl -s -X POST "http://localhost:5626/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$SYNIVERSE_AID_ALIAS\", \"url\":\"$SYNIVERSE_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5629/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$SYNIVERSE_AID_ALIAS\", \"url\":\"$SYNIVERSE_AID_OOBI\"}" | jq
 
 echo 'Resolving Brand oobi'
 sleep 3
 curl -s -X POST "http://localhost:5625/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$BRAND_AID_ALIAS\", \"url\":\"$BRAND_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5627/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$BRAND_AID_ALIAS\", \"url\":\"$BRAND_AID_OOBI\"}" | jq
+curl -s -X POST "http://localhost:5626/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$BRAND_AID_ALIAS\", \"url\":\"$BRAND_AID_OOBI\"}" | jq
 curl -s -X POST "http://localhost:5628/oobi" -H "accept: */*" -H "Content-Type: application/json" -d "{\"oobialias\": \"$BRAND_AID_ALIAS\", \"url\":\"$BRAND_AID_OOBI\"}" | jq
 
 RULES=`cat ${KERI_DEMO_SCRIPT_DIR}/data/rules.json`
@@ -126,7 +133,7 @@ PROVENANT_QVI_CRED_SAID=$(curl -s -X GET "http://localhost:5627/credentials/$PRO
 echo $PROVENANT_QVI_CRED_SAID | jq -f ${KERI_DEMO_SCRIPT_DIR}/data/legal-entity-edges-filter.jq  > /tmp/legal-entity-edges.json
 LE_EDGES=`cat /tmp/legal-entity-edges.json`
 #RULES=`cat ${KERI_DEMO_SCRIPT_DIR}/data/rules.json`
-curl -s -X POST "http://localhost:5627/credentials/$PROVENANT_QVI_AID_ALIAS" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"credentialData\":{\"LEI\":\"984500983AD71E4FBC41\"},\"recipient\":\"$PROVENANT_VETTER_AID\",\"registry\":\"$PROVENANT_QVI_AID_REGISTRY\",\"schema\":\"ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY\",\"source\":$LE_EDGES,\"rules\":$RULES}" | jq
+curl -s -X POST "http://localhost:5627/credentials/$PROVENANT_QVI_AID_ALIAS" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"credentialData\":{\"LEI\":\"2549004LVAIBQNGA7J17\"},\"recipient\":\"$PROVENANT_VETTER_AID\",\"registry\":\"$PROVENANT_QVI_AID_REGISTRY\",\"schema\":\"ENPXp1vQzRF6JwIuS-mp2U8Uf1MoADoP_GqQ62VsDZWY\",\"source\":$LE_EDGES,\"rules\":$RULES}" | jq
 sleep 8
 
 # echo "Provenant-Vetter  retrieves Credentials..."
@@ -154,8 +161,13 @@ echo 'REGISTER ENTERPRISES  in custodial service'
 Provenant_Enterprise_Id=$(curl -s -X  POST 'http://localhost:9082/enterprises' -H 'Content-Type: application/json' -d '{"name": "Provenant", "legalEntityIdentifier": "984500983AD71E4FBC41", "keriAgentEndpoint": "http://localhost:5627", "role": "PlatformOwner"}'  | jq -r '.id' )
 echo "Provenant_Enterprise_Id : $Provenant_Enterprise_Id"
 
+echo 'REGISTER ENTERPRISES  in custodial service'
+# Register Aegis in custodial service
+Aegis_Enterprise_Id=$(curl -s -X  POST 'http://localhost:9082/enterprises' -H 'Content-Type: application/json' -d '{"name": "Aegis", "legalEntityIdentifier": "2549004LVAIBQNGA7J17", "keriAgentEndpoint": "http://localhost:5626", "role": "CampaignServiceProvider"}'  | jq -r '.id' )
+echo "Provenant_Enterprise_Id : $Aegis_Enterprise_Id"
+
 # Register Syniverse in custodial service
-Syniverse_Enterprise_Id=$(curl -s -X  POST 'http://localhost:9082/enterprises' -H 'Content-Type: application/json' -d '{"name": "Syniverse", "legalEntityIdentifier": "549300CYZBHMZC8VLL59", "keriAgentEndpoint": "http://localhost:5628", "role": "DirectConnectAggregator"}' | jq -r '.id' )
+Syniverse_Enterprise_Id=$(curl -s -X  POST 'http://localhost:9082/enterprises' -H 'Content-Type: application/json' -d '{"name": "Twilio", "legalEntityIdentifier": "549300CYZBHMZC8VLL59", "keriAgentEndpoint": "http://localhost:5628", "role": "DirectConnectAggregator"}' | jq -r '.id' )
 echo "Syniverse_Enterprise_Id : $Syniverse_Enterprise_Id"
 
 # Register Brand in custodial service
@@ -168,7 +180,7 @@ curl -s -X POST "http://localhost:9082/enterprises/$Provenant_Enterprise_Id/iden
 -d "{\"aid\": \"$PROVENANT_QVI_AID\", \"alias\": \"$PROVENANT_QVI_AID_ALIAS\", \"oobi\": \"$PROVENANT_QVI_AID_OOBI\", \"credentialRegistry\": \"$PROVENANT_QVI_AID_REGISTRY\"}"
 
 # Insert Provenant-QVI AID to Custodial Service
-curl -s -X POST "http://localhost:9082/enterprises/$Provenant_Enterprise_Id/identifiers" -H 'Content-Type: application/json' \
+curl -s -X POST "http://localhost:9082/enterprises/$Aegis_Enterprise_Id/identifiers" -H 'Content-Type: application/json' \
 -d "{\"aid\": \"$PROVENANT_VETTER_AID\", \"alias\": \"$PROVENANT_VETTER_AID_ALIAS\", \"oobi\": \"$PROVENANT_VETTER_AID_OOBI\", \"credentialRegistry\": \"$PROVENANT_VETTER_AID_REGISTRY\"}"
 
 # Insert Syniverse AID to Custodial Service
@@ -183,5 +195,6 @@ curl -s -X POST "http://localhost:9082/enterprises/$Brand_Enterprise_Id/identifi
 # Unlock Agents
 # curl -s -X PUT "http://localhost:5625/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"GLEIF\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq
 # curl -s -X PUT "http://localhost:5627/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Provenant\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq
+# curl -s -X PUT "http://localhost:5626/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Aegis\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq
 # curl -s -X PUT "http://localhost:5628/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Syniverse\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq
 # curl -s -X PUT "http://localhost:5629/boot" -H "accept: */*" -H "Content-Type: application/json" -d "{\"name\":\"Brand\",\"passcode\":\"DoB2-6Fj4x-9Lbo-AFWJr-a17O\"}" | jq

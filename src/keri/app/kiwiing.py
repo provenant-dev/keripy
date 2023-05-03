@@ -728,7 +728,7 @@ class IdentifierEnd(doing.DoDoer):
 
             yield self.tock
 
-    def on_get_pri(self, _, rep, alias=None):
+    def on_get_key(self, _, rep, alias=None):
         """ Identifier GET endpoint
 
         Parameters:
@@ -4142,7 +4142,7 @@ def loadEnds(app, *,
     app.add_route("/ids/{alias}/metadata", identifierEnd, suffix="metadata")
     app.add_route("/ids/{alias}/rot", identifierEnd, suffix="rot")
     app.add_route("/ids/{alias}/ixn", identifierEnd, suffix="ixn")
-    app.add_route("/ids/{alias}/pri", identifierEnd, suffix="pri")
+    app.add_route("/ids/{alias}/key", identifierEnd, suffix="key")
 
     keyEnd = KeyStateEnd(hby=hby, counselor=counselor)
     app.add_route("/keystate/{prefix}", keyEnd)
