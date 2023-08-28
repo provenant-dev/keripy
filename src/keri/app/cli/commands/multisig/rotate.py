@@ -80,7 +80,7 @@ class GroupMultisigRotate(doing.DoDoer):
         self.wits = wits if wits is not None else []
         self.cuts = cuts if cuts is not None else []
         self.adds = adds if adds is not None else []
-        
+
         self.hby = existing.setupHby(name=name, base=base, bran=bran)
         self.hbyDoer = habbing.HaberyDoer(habery=self.hby)  # setup doer
 
@@ -113,11 +113,12 @@ class GroupMultisigRotate(doing.DoDoer):
         if ghab is None:
             raise kering.ConfigurationError(f"Alias {self.alias} is invalid")
 
+        smids, rmids = ghab.members()
         if self.smids is None:
-            self.smids = ghab.smids
-            
+            self.smids = smids
+
         if self.rmids is None:
-            self.rmids = self.smids
+            self.rmids = rmids
 
         if self.wits:
             if self.adds or self.cuts:
@@ -140,6 +141,11 @@ class GroupMultisigRotate(doing.DoDoer):
                 break
 
             yield self.tock
+
+        habord = self.hby.db.habs.get(keys=ghab.name)
+        habord.smids = self.smids
+        habord.rmids = self.rmids
+        self.hby.db.habs.pin(keys=ghab.name, val=habord)
 
         if ghab.kever.delegator:
             yield from self.postman.sendEvent(hab=ghab, fn=ghab.kever.sn)
