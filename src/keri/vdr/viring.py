@@ -47,7 +47,7 @@ class rbdict(dict):
             if (rsr := self.reger.states.get(keys=k)) is None:
                 raise ex  # reraise KeyError
             try:
-                tever = eventing.Tever(stt=rsr, db=self.db, reger=self.reger)
+                tever = eventing.Tever(rsr=rsr, db=self.db, reger=self.reger)
             except kering.MissingEntryError:  # no kel event for keystate
                 raise ex  # reraise KeyError
             super(rbdict, self).__setitem__(k, tever)
@@ -402,7 +402,7 @@ class Reger(dbing.LMDBer):
             atc = bytearray(signing.serialize(creder, prefixer, seqner, saider))
             del atc[0:creder.size]
 
-            iss = bytearray(self.cloneTvtAt(pre=prefixer.qb64, sn=seqner.sn))
+            iss = bytearray(self.cloneTvtAt(creder.said))
             iserder = serdering.SerderKERI(raw=iss)
             issatc = bytes(iss[iserder.size:])
 

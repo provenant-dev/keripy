@@ -15,56 +15,9 @@ from .coring import (Ilks, CtrDex, Counter, Seqner, Siger, Cigar,
 from . import serdering
 from .. import help
 from .. import kering
+from ..kering import ColdDex, Colds, sniff
 
 logger = help.ogler.getLogger()
-
-
-@dataclass(frozen=True)
-class ColdCodex:
-    """
-    ColdCodex is codex of cold stream start tritets of first byte
-    Only provide defined codes.
-    Undefined are left out so that inclusion(exclusion) via 'in' operator works.
-
-    First three bits:
-        0o0 = 000 free
-        0o1 = 001 cntcode B64
-        0o2 = 010 opcode B64
-        0o3 = 011 json
-        0o4 = 100 mgpk
-        0o5 = 101 cbor
-        0o6 = 110 mgpk
-        007 = 111 cntcode or opcode B2
-
-    status is one of ('evt', 'txt', 'bny' )
-    'evt' if tritet in (ColdDex.JSON, ColdDex.MGPK1, ColdDex.CBOR, ColdDex.MGPK2)
-    'txt' if tritet in (ColdDex.CtB64, ColdDex.OpB64)
-    'bny' if tritet in (ColdDex.CtOpB2,)
-
-    otherwise raise ColdStartError
-
-    x = bytearray([0x2d, 0x5f])
-    x == bytearray(b'-_')
-    x[0] >> 5 == 0o1
-    True
-    """
-    Free: int = 0o0  # not taken
-    CtB64: int = 0o1  # CountCode Base64
-    OpB64: int = 0o2  # OpCode Base64
-    JSON: int = 0o3  # JSON Map Event Start
-    MGPK1: int = 0o4  # MGPK Fixed Map Event Start
-    CBOR: int = 0o5  # CBOR Map Event Start
-    MGPK2: int = 0o6  # MGPK Big 16 or 32 Map Event Start
-    CtOpB2: int = 0o7  # CountCode or OpCode Base2
-
-    def __iter__(self):
-        return iter(astuple(self))
-
-
-ColdDex = ColdCodex()  # Make instance
-
-Coldage = namedtuple("Coldage", 'msg txt bny')  # stream cold start status
-Colds = Coldage(msg='msg', txt='txt', bny='bny')
 
 
 class Parser:
@@ -89,10 +42,16 @@ class Parser:
                 whenever stream includes pipelined count codes.
         kvy (Kevery): route KEL message types to this instance
         tvy (Tevery): route TEL message types to this instance
+        exc (Exchanger): route EXN message types to this instance
+        rvy (Revery): reply (RPY) message handler
+        vry (Verfifier): credential verifier with wallet storage
+        local (bool): True means event source is local (protected) for validation
+                         False means event source is remote (unprotected) for validation
 
     """
 
-    def __init__(self, ims=None, framed=True, pipeline=False, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+    def __init__(self, ims=None, framed=True, pipeline=False, kvy=None,
+                 tvy=None, exc=None, rvy=None, vry=None, local=False):
         """
         Initialize instance:
 
@@ -107,6 +66,8 @@ class Parser:
             exc (Exchanger): route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verfifier): credential verifier with wallet storage
+            local (bool): True means event source is local (protected) for validation
+                         False means event source is remote (unprotected) for validation
         """
         self.ims = ims if ims is not None else bytearray()
         self.framed = True if framed else False  # extract until end-of-stream
@@ -116,46 +77,8 @@ class Parser:
         self.exc = exc
         self.rvy = rvy
         self.vry = vry
+        self.local = True if local else False
 
-    @staticmethod
-    def sniff(ims):
-        """
-        Returns status string of cold start of stream ims bytearray by looking
-        at first triplet of first byte to determin if message or counter code
-        and if counter code whether Base64 or Base2 representation
-
-        First three bits:
-        0o0 = 000 free
-        0o1 = 001 cntcode B64
-        0o2 = 010 opcode B64
-        0o3 = 011 json
-        0o4 = 100 mgpk
-        0o5 = 101 cbor
-        0o6 = 110 mgpk
-        007 = 111 cntcode or opcode B2
-
-        counter B64 in (0o1, 0o2) return 'txt'
-        counter B2 in (0o7)  return 'bny'
-        event in (0o3, 0o4, 0o5, 0o6)  return 'evt'
-        unexpected in (0o0)  raise ColdStartError
-        Colds = Coldage(msg='msg', txt='txt', bny='bny')
-
-        'msg' if tritet in (ColdDex.JSON, ColdDex.MGPK1, ColdDex.CBOR, ColdDex.MGPK2)
-        'txt' if tritet in (ColdDex.CtB64, ColdDex.OpB64)
-        'bny' if tritet in (ColdDex.CtOpB2,)
-        """
-        if not ims:
-            raise kering.ShortageError("Need more bytes.")
-
-        tritet = ims[0] >> 5
-        if tritet in (ColdDex.JSON, ColdDex.MGPK1, ColdDex.CBOR, ColdDex.MGPK2):
-            return Colds.msg
-        if tritet in (ColdDex.CtB64, ColdDex.OpB64):
-            return Colds.txt
-        if tritet in (ColdDex.CtOpB2,):
-            return Colds.bny
-
-        raise kering.ColdStartError("Unexpected tritet={} at stream start.".format(tritet))
 
     @staticmethod
     def extract(ims, klas, cold=Colds.txt):
@@ -170,6 +93,7 @@ class Parser:
             return klas(qb2=ims, strip=True)
         else:
             raise kering.ColdStartError("Invalid stream state cold={}.".format(cold))
+
 
     @staticmethod
     def _extractor(ims, klas, cold=Colds.txt, abort=False):
@@ -197,6 +121,7 @@ class Parser:
                 if abort:  # pipelined pre-collects full frame before extracting
                     raise  # bad pipelined frame so abort by raising error
                 yield
+
 
     def _sadPathSigGroup(self, ctr, ims, root=None, cold=Colds.txt, pipelined=False):
         """
@@ -249,6 +174,7 @@ class Parser:
             raise kering.UnexpectedCountCodeError("Wrong "
                                                   "count code={}.Expected code={}."
                                                   "".format(ctr.code, CtrDex.ControllerIdxSigs))
+
 
     def _transIdxSigGroups(self, ctr, ims, cold=Colds.txt, pipelined=False):
         """
@@ -304,6 +230,7 @@ class Parser:
 
             yield prefixer, seqner, saider, isigers
 
+
     def _nonTransReceiptCouples(self, ctr, ims, cold=Colds.txt, pipelined=False):
         """
         Extract attached rct couplets into list of sigvers
@@ -336,7 +263,9 @@ class Parser:
 
             yield cigar
 
-    def parse(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+
+    def parse(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None,
+              exc=None, rvy=None, vry=None, local=None):
         """
         Processes all messages from incoming message stream, ims,
         when provided. Otherwise process messages from .ims
@@ -359,11 +288,18 @@ class Parser:
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verfifier): credential verifier with wallet storage
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
 
         New Logic:
             Attachments must all have counters so know if txt or bny format for
             attachments. So even when framed==True must still have counters.
         """
+        local = local if local is not None else self.local
+        local = True if local else False
+
+
         parsator = self.allParsator(ims=ims,
                                     framed=framed,
                                     pipeline=pipeline,
@@ -371,7 +307,8 @@ class Parser:
                                     tvy=tvy,
                                     exc=exc,
                                     rvy=rvy,
-                                    vry=vry)
+                                    vry=vry,
+                                    local=local)
 
         while True:
             try:
@@ -379,7 +316,9 @@ class Parser:
             except StopIteration:
                 break
 
-    def parseOne(self, ims=None, framed=True, pipeline=False, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+
+    def parseOne(self, ims=None, framed=True, pipeline=False, kvy=None, tvy=None,
+                 exc=None, rvy=None, vry=None, local=None):
         """
         Processes one messages from incoming message stream, ims,
         when provided. Otherwise process message from .ims
@@ -401,11 +340,17 @@ class Parser:
             tvy (Tevery): route TEL message types to this instance
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
 
         New Logic:
             Attachments must all have counters so know if txt or bny format for
             attachments. So even when framed==True must still have counters.
         """
+        local = local if local is not None else self.local
+        local = True if local else False
+
         parsator = self.onceParsator(ims=ims,
                                      framed=framed,
                                      pipeline=pipeline,
@@ -413,14 +358,17 @@ class Parser:
                                      tvy=tvy,
                                      exc=exc,
                                      rvy=rvy,
-                                     vry=vry)
+                                     vry=vry,
+                                     local=local)
         while True:
             try:
                 next(parsator)
             except StopIteration:
                 break
 
-    def allParsator(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+
+    def allParsator(self, ims=None, framed=None, pipeline=None, kvy=None,
+                    tvy=None, exc=None, rvy=None, vry=None, local=None):
         """
         Returns generator to parse all messages from incoming message stream,
         ims until ims is exhausted (empty) then returns.
@@ -443,6 +391,9 @@ class Parser:
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verfifier): credential verifier with wallet storage
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
 
         New Logic:
             Attachments must all have counters so know if txt or bny format for
@@ -461,6 +412,8 @@ class Parser:
         exc = exc if exc is not None else self.exc
         rvy = rvy if rvy is not None else self.rvy
         vry = vry if vry is not None else self.vry
+        local = local if local is not None else self.local
+        local = True if local else False
 
         while ims:  # only process until ims empty
             try:
@@ -471,7 +424,8 @@ class Parser:
                                                    tvy=tvy,
                                                    exc=exc,
                                                    rvy=rvy,
-                                                   vry=vry)
+                                                   vry=vry,
+                                                   local=local)
 
             except kering.SizedGroupError as ex:  # error inside sized group
                 # processOneIter already flushed group so do not flush stream
@@ -498,7 +452,9 @@ class Parser:
 
         return True
 
-    def onceParsator(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+
+    def onceParsator(self, ims=None, framed=None, pipeline=None, kvy=None,
+                     tvy=None, exc=None, rvy=None, vry=None, local=None):
         """
         Returns generator to parse one message from incoming message stream, ims.
         If ims not provided parse messages from .ims
@@ -519,6 +475,9 @@ class Parser:
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verfifier): credential verifier with wallet storage
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
 
         New Logic:
             Attachments must all have counters so know if txt or bny format for
@@ -537,6 +496,8 @@ class Parser:
         exc = exc if exc is not None else self.exc
         rvy = rvy if rvy is not None else self.rvy
         vry = vry if vry is not None else self.vry
+        local = local if local is not None else self.local
+        local = True if local else False
 
         done = False
         while not done:
@@ -548,7 +509,8 @@ class Parser:
                                                    tvy=tvy,
                                                    exc=exc,
                                                    rvy=rvy,
-                                                   vry=vry)
+                                                   vry=vry,
+                                                   local=local)
 
             except kering.SizedGroupError as ex:  # error inside sized group
                 # processOneIter already flushed group so do not flush stream
@@ -576,13 +538,15 @@ class Parser:
 
         return done
 
-    def parsator(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+
+    def parsator(self, ims=None, framed=None, pipeline=None, kvy=None, tvy=None,
+                 exc=None, rvy=None, vry=None, local=None):
         """
         Returns generator to continually parse messages from incoming message
-        stream, ims. Empty yields when ims is emply.
+        stream, ims. Empty yields when ims is emply. Does not return.
         Useful for always running servers.
         One yield from per each message if any.
-        Continually yields while ims is empty.
+        Continually yields while ims is empty, i.e. does not return.
         If ims not provided then parse messages from .ims
 
         Parameters:
@@ -601,6 +565,10 @@ class Parser:
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verifier): credential processor
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
+
 
         New Logic:
             Attachments must all have counters so know if txt or bny format for
@@ -619,6 +587,8 @@ class Parser:
         exc = exc if exc is not None else self.exc
         rvy = rvy if rvy is not None else self.rvy
         vry = vry if vry is not None else self.vry
+        local = local if local is not None else self.local
+        local = True if local else False
 
         while True:  # continuous stream processing never stop
             try:
@@ -629,7 +599,8 @@ class Parser:
                                                    tvy=tvy,
                                                    exc=exc,
                                                    rvy=rvy,
-                                                   vry=vry)
+                                                   vry=vry,
+                                                   local=local)
 
             except kering.SizedGroupError as ex:  # error inside sized group
                 # processOneIter already flushed group so do not flush stream
@@ -658,7 +629,7 @@ class Parser:
 
 
     def msgParsator(self, ims=None, framed=True, pipeline=False,
-                    kvy=None, tvy=None, exc=None, rvy=None, vry=None):
+                    kvy=None, tvy=None, exc=None, rvy=None, vry=None, local=None):
         """
         Returns generator that upon each iteration extracts and parses msg
         with attached crypto material (signature etc) from incoming message
@@ -685,6 +656,9 @@ class Parser:
             exc (Exchanger) route EXN message types to this instance
             rvy (Revery): reply (RPY) message handler
             vry (Verifier) ACDC credential processor
+            local (bool): True means event source is local (protected) for validation
+                          False means event source is remote (unprotected) for validation
+                          None means use default .local
 
         Logic:
             Currently only support couters on attachments not on combined or
@@ -703,6 +677,9 @@ class Parser:
 
 
         """
+        local = local if local is not None else self.local
+        local = True if local else False
+
         serdery = serdering.Serdery(version=kering.Version)
 
         if ims is None:
@@ -711,7 +688,7 @@ class Parser:
         while not ims:
             yield
 
-        cold = self.sniff(ims)  # check for spurious counters at front of stream
+        cold = sniff(ims)  # check for spurious counters at front of stream
         if cold in (Colds.txt, Colds.bny):  # not message error out to flush stream
             # replace with pipelining here once CESR message format supported.
             raise kering.ColdStartError("Expecting message counter tritet={}"
@@ -725,16 +702,6 @@ class Parser:
                 yield
             else: # extracted and stripped successfully
                 break  # break out of while loop
-
-
-        #while True:  # extract and deserialize message from ims
-            #try:
-                #sadder = Sadder(raw=ims)
-            #except kering.ShortageError as ex:  # need more bytes
-                #yield
-            #else:  # extracted successfully
-                #del ims[:sadder.size]  # strip off event from front of ims
-                #break
 
         sigers = []  # list of Siger instances of attached indexed controller signatures
         wigers = []  # list of Siger instance of attached indexed witness signatures
@@ -762,7 +729,7 @@ class Parser:
             # extract attachments must start with counter so know if txt or bny.
             while not ims:
                 yield
-            cold = self.sniff(ims)  # expect counter at front of attachments
+            cold = sniff(ims)  # expect counter at front of attachments
             if cold != Colds.msg:  # not new message so process attachments
                 ctr = yield from self._extractor(ims=ims, klas=Counter, cold=cold)
                 if ctr.code == CtrDex.AttachedMaterialQuadlets:  # pipeline ctr?
@@ -987,7 +954,7 @@ class Parser:
                         # group may switch stream state txt or bny
                         if not ims:  # end of frame
                             break
-                        cold = self.sniff(ims)
+                        cold = sniff(ims)
                         if cold == Colds.msg:  # new message so attachments done
                             break  # finished attachments since new message
                     else:  # process until next message
@@ -995,7 +962,7 @@ class Parser:
                         # group may switch stream state txt or bny
                         while not ims:
                             yield  # no frame so must wait for next message
-                        cold = self.sniff(ims)  # ctr or msg
+                        cold = sniff(ims)  # ctr or msg
                         if cold == Colds.msg:  # new message
                             break  # finished attachments since new message
 
@@ -1009,11 +976,6 @@ class Parser:
 
         if isinstance(serder, serdering.SerderKERI):
             ilk = serder.ilk  # dispatch abased on ilk
-
-        #if sadder.proto == Protos.keri:
-            #serder = Serder(sad=sadder)
-
-            #ilk = serder.ked["t"]  # dispatch abased on ilk
 
             if ilk in [Ilks.icp, Ilks.rot, Ilks.ixn, Ilks.dip, Ilks.drt]:  # event msg
                 firner, dater = frcs[-1] if frcs else (None, None)  # use last one if more than one
@@ -1029,12 +991,15 @@ class Parser:
                                      delseqner=delseqner,
                                      delsaider=delsaider,
                                      firner=firner,
-                                     dater=dater)
+                                     dater=dater,
+                                     local=local)
 
                     if cigars:
-                        kvy.processReceiptCouples(serder, cigars, firner=firner)
+                        kvy.processAttachedReceiptCouples(serder, cigars,
+                                                    firner=firner, local=local)
                     if trqs:
-                        kvy.processReceiptQuadruples(serder, trqs, firner=firner)
+                        kvy.processAttachedReceiptQuadruples(serder, trqs,
+                                                    firner=firner, local=local)
 
                 except AttributeError as ex:
                     raise kering.ValidationError("No kevery to process so dropped msg"
@@ -1047,13 +1012,16 @@ class Parser:
 
                 try:
                     if cigars:
-                        kvy.processReceipt(serder=serder, cigars=cigars)
+                        kvy.processReceipt(serder=serder, cigars=cigars,
+                                           local=local)
 
                     if wigers:
-                        kvy.processReceiptWitness(serder=serder, wigers=wigers)
+                        kvy.processReceiptWitness(serder=serder, wigers=wigers,
+                                                  local=local)
 
                     if tsgs:
-                        kvy.processReceiptTrans(serder=serder, tsgs=tsgs)
+                        kvy.processReceiptTrans(serder=serder, tsgs=tsgs,
+                                                local=local)
 
                 except AttributeError:
                     raise kering.ValidationError("No kevery to process so dropped msg"
@@ -1120,7 +1088,7 @@ class Parser:
                     if tsgs:
                         exc.processEvent(tsgs=tsgs, **args)
 
-                except AttributeError as e:
+                except AttributeError:
                     raise kering.ValidationError("No Exchange to process so dropped msg"
                                                  "= {}.".format(serder.pretty()))
 

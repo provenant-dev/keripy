@@ -19,15 +19,13 @@ from .. import core
 from .. import help
 from ..core import serdering, coring
 from ..core.coring import (MtrDex, Serials, versify, Prefixer,
-                           Ilks, Seqner, Verfer)
-from ..core.eventing import SealEvent, ample, TraitDex, verifySigs, validateSN
+                           Ilks, Seqner, Verfer, Number)
+from ..core.eventing import SealEvent, ample, TraitDex, verifySigs
 from ..db import basing, dbing
 from ..db.dbing import dgKey, snKey
 from ..help import helping
 from ..kering import (MissingWitnessSignatureError, Version,
                       MissingAnchorError, ValidationError, OutOfOrderError, LikelyDuplicitousError)
-from ..kering import (VCP_LABELS, VRT_LABELS, ISS_LABELS, BIS_LABELS, REV_LABELS,
-                      BRV_LABELS, TSN_LABELS, CRED_TSN_LABELS)
 from ..vdr import viring
 
 logger = help.ogler.getLogger()
@@ -71,7 +69,7 @@ def incept(
     cnfg = cnfg if cnfg is not None else []
 
     baks = baks if baks is not None else []
-    if TraitDex.NoBackers in cnfg and len(baks) > 0:
+    if TraitDex.NoRegistrarBackers in cnfg and len(baks) > 0:
         raise ValueError("{} backers specified for NB vcp, 0 allowed".format(len(baks)))
 
     if len(oset(baks)) != len(baks):
@@ -415,8 +413,6 @@ def state(pre,
           sn,
           ri,
           eilk,
-          br,
-          ba,
           dts=None,  # default current datetime
           toad=None,  # default based on wits
           wits=None,  # default to []
@@ -436,8 +432,6 @@ def state(pre,
         said (str): digest of latest event
         ri (str): qb64 AID of credential registry
         eilk (str): message type (ilk) oflatest event
-        br (list): witness remove list (cuts)
-        ba (list): witness add list (adds)
         a (dict): key event anchored seal data
         dts (str) ISO 8601 formated current datetime
         toad (int): int of witness threshold
@@ -464,8 +458,6 @@ def state(pre,
         "n": "EZ-i0d8JZAoTNZH3ULvaU6JR2nmwyYAfSVPzhzS6b5CM",
         "bt": "1",
         "b": ["DnmwyYAfSVPzhzS6b5CMZ-i0d8JZAoTNZH3ULvaU6JR2"],
-        "br": ["Dd8JZAoTNZH3ULvaU6JR2nmwyYAfSVPzhzS6b5CMZ-i0"],
-        "ba": ["DnmwyYAfSVPzhzS6b5CMZ-i0d8JZAoTNZH3ULvaU6JR2"]
         "di": "EYAfSVPzhzS6b5CMaU6JR2nmwyZ-i0d8JZAoTNZH3ULv",
         "c": ["EO"],
     }
@@ -503,14 +495,6 @@ def state(pre,
                              "".format(toad, list(witset)))
 
     cnfg = cnfg if cnfg is not None else []
-
-    if len(oset(br)) != len(br):  # duplicates in cuts
-        raise ValueError("Invalid cuts = {} in latest est event, has duplicates"
-                         ".".format(br))
-
-    if len(oset(ba)) != len(ba):  # duplicates in adds
-        raise ValueError("Invalid adds = {} in latest est event, has duplicates"
-                         ".".format(ba))
 
     rsr = viring.RegStateRecord(
                vn=list(version),  # version number as list [major, minor]
@@ -658,7 +642,7 @@ class Tever:
     Has the following public attributes and properties:
 
     Class Attributes:
-        .NoBackers is Boolean
+        .NoRegistrarBackers is Boolean
                 True means do not allow backers (default to witnesses of controlling KEL)
                 False means allow backers (ignore witnesses of controlling KEL)
 
@@ -680,9 +664,9 @@ class Tever:
         .noBackers is boolean trait True means do not allow backers
 
     """
-    NoBackers = False
+    NoRegistrarBackers = False
 
-    def __init__(self, cues=None, stt=None, serder=None, seqner=None, saider=None,
+    def __init__(self, cues=None, rsr=None, serder=None, seqner=None, saider=None,
                  bigers=None, db=None, reger=None, noBackers=None, estOnly=None,
                  regk=None, local=False):
         """ Create incepting tever and state from registry inception serder
@@ -691,7 +675,7 @@ class Tever:
 
         Parameters:
             serder (Serder): instance of registry inception event
-            stt (Serder): transaction state notice state message Serder
+            rsr (RegStateRecord): transaction state notice state message Serder
             seqner (Seqner): issuing event sequence number from controlling KEL.
             saider (Saider): issuing event said from controlling KEL.
             bigers (list): list of Siger instances of indexed backer signatures of
@@ -711,7 +695,7 @@ class Tever:
 
         """
 
-        if not (stt or serder):
+        if not (rsr or serder):
             raise ValueError("Missing required arguments. Need state or serder")
 
         self.reger = reger if reger is not None else viring.Reger()
@@ -720,8 +704,8 @@ class Tever:
         self.db = db if db is not None else basing.Baser(reopen=True)
         self.local = True if local else False
 
-        if stt:  # preload from state
-            self.reload(stt)
+        if rsr:  # preload from state
+            self.reload(rsr)
             return
 
         self.version = serder.version
@@ -732,11 +716,11 @@ class Tever:
             raise ValidationError("Expected ilk {} got {} for evt: {}".format(Ilks.vcp, ilk, serder))
 
         self.ilk = ilk
-        labels = VCP_LABELS
-        for k in labels:
-            if k not in serder.ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, serder.ked))
+        #labels = VCP_LABELS
+        #for k in labels:
+            #if k not in serder.ked:
+                #raise ValidationError("Missing element = {} from {} event for "
+                                      #"evt = {}.".format(k, ilk, serder.ked))
 
         self.incept(serder=serder)
         self.config(serder=serder, noBackers=noBackers, estOnly=estOnly)
@@ -758,40 +742,34 @@ class Tever:
 
         self.regk = self.prefixer.qb64
 
-    def reload(self, ksn):
+    def reload(self, rsr):
         """ Reload Tever attributes (aka its state) from state serder
 
         Reload Tever attributes (aka its state) from state serder
 
         Parameters:
-            ksn (Serder): instance of key stat notice 'ksn' message body
+            rsr (RegStateRecord): instance of key stat notice 'ksn' message body
 
         """
 
-        for k in TSN_LABELS:
-            if k not in ksn.ked:
-                raise ValidationError("Missing element = {} from {} event."
-                                      " evt = {}.".format(k, Ilks.ksn,
-                                                          ksn.pretty()))
+        ked = asdict(rsr)
 
-        self.version = ksn.version
-        self.pre = ksn.ked["ii"]
-        self.regk = ksn.ked["i"]
+        self.version = rsr.vn
+        self.pre = ked["ii"]
+        self.regk = ked["i"]
         self.prefixer = Prefixer(qb64=self.regk)
-        self.sn = ksn.sn
-        self.ilk = ksn.ked["et"]
-        self.toad = int(ksn.ked["bt"], 16)
-        self.baks = ksn.ked["b"]
-        self.cuts = ksn.ked["br"]
-        self.adds = ksn.ked["ba"]
+        self.sn = int(ked['s'], 16)
+        self.ilk = ked["et"]
+        self.toad = int(ked["bt"], 16)
+        self.baks = ked["b"]
 
-        self.noBackers = True if TraitDex.NoBackers in ksn.ked["c"] else False
-        self.estOnly = True if TraitDex.EstOnly in ksn.ked["c"] else False
+        self.noBackers = True if TraitDex.NoRegistrarBackers in ked["c"] else False
+        self.estOnly = True if TraitDex.EstOnly in ked["c"] else False
 
         if (raw := self.reger.getTvt(key=dgKey(pre=self.prefixer.qb64,
-                                               dig=ksn.ked['d']))) is None:
+                                               dig=ked['d']))) is None:
             raise kering.MissingEntryError("Corresponding event for state={} not found."
-                                           "".format(ksn.pretty()))
+                                           "".format(ked))
         self.serder = serdering.SerderKERI(raw=bytes(raw))
 
     def state(self):  #state(self, kind=Serials.json)
@@ -803,12 +781,10 @@ class Tever:
 
 
         """
-        br = self.cuts
-        ba = self.adds
 
         cnfg = []
         if self.noBackers:
-            cnfg.append(TraitDex.NoBackers)
+            cnfg.append(TraitDex.NoRegistrarBackers)
 
         dgkey = dbing.dgKey(self.regk, self.serder.said)
         couple = self.reger.getAnc(dgkey)
@@ -825,8 +801,6 @@ class Tever:
                       #a=dict(s=seqner.sn, d=diger.qb64),
                       toad=self.toad,
                       wits=self.baks,
-                      br=br,
-                      ba=ba,
                       cnfg=cnfg,
                       #kind=kind
                       )
@@ -850,8 +824,9 @@ class Tever:
             raise ValidationError("Invalid prefix = {} for registry inception evt = {}."
                                   .format(self.prefixer.qb64, ked))
 
-        sn = ked["s"]
-        self.sn = validateSN(sn, inceptive=True)
+        #sn = ked["s"]
+        #self.sn = validateSN(sn, inceptive=True)
+        self.sn = Number(numh=ked["s"]).validate(inceptive=True).sn
 
         self.cuts = []  # always empty at inception since no prev event
         self.adds = []  # always empty at inception since no prev event
@@ -888,7 +863,7 @@ class Tever:
         """
         # assign traits
         self.noBackers = (True if (noBackers if noBackers is not None
-                                   else self.NoBackers)
+                                   else self.NoRegistrarBackers)
                           else False)  # ensure default noBackers is boolean
 
         self.estOnly = (True if (estOnly if estOnly is not None
@@ -896,7 +871,7 @@ class Tever:
                           else False)  # ensure default estOnly is boolean
 
         cnfg = serder.ked["c"]  # process cnfg for traits
-        if TraitDex.NoBackers in cnfg:
+        if TraitDex.NoRegistrarBackers in cnfg:
             self.noBackers = True
         if TraitDex.EstOnly in cnfg:
             self.estOnly = True
@@ -919,12 +894,13 @@ class Tever:
 
         ked = serder.ked
         ilk = ked["t"]
-        sn = ked["s"]
+        #sn = ked["s"]
 
         icp = ilk in (Ilks.iss, Ilks.bis)
 
         # validate SN for
-        sn = validateSN(sn, inceptive=icp)
+        #sn = validateSN(sn, inceptive=icp)
+        sn = Number(numh=ked["s"]).validate(inceptive=icp).sn
 
         if ilk in (Ilks.vrt,):
             if self.noBackers is True:
@@ -985,8 +961,8 @@ class Tever:
         ilk = ked["t"]
         dig = ked["p"]
 
-        # XXXX should there be validation of labels here
-        labels = VRT_LABELS  # assumes ilk == Ilks.vrt
+
+        #labels = VRT_LABELS  # assumes ilk == Ilks.vrt
         #for k in labels:
             #if k not in ked:
                 #raise ValidationError("Missing element = {} from {} event for "
@@ -1075,12 +1051,11 @@ class Tever:
         ilk = ked["t"]
         vci = vcpre
 
-        labels = ISS_LABELS if ilk == Ilks.iss else BIS_LABELS
-
-        for k in labels:
-            if k not in ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, ked))
+        #labels = ISS_LABELS if ilk == Ilks.iss else BIS_LABELS
+        #for k in labels:
+            #if k not in ked:
+                #raise ValidationError("Missing element = {} from {} event for "
+                                      #"evt = {}.".format(k, ilk, ked))
 
         if ilk == Ilks.iss:  # simple issue
             if self.noBackers is False:
@@ -1142,12 +1117,11 @@ class Tever:
         vcpre = ked["i"]
         ilk = ked["t"]
 
-        labels = REV_LABELS if ilk == Ilks.rev else BRV_LABELS
-
-        for k in labels:
-            if k not in ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, ked))
+        #labels = REV_LABELS if ilk == Ilks.rev else BRV_LABELS
+        #for k in labels:
+            #if k not in ked:
+                #raise ValidationError("Missing element = {} from {} event for "
+                                      #"evt = {}.".format(k, ilk, ked))
 
         # have to compare with VC issuance serder
         vci = vcpre
@@ -1567,13 +1541,14 @@ class Tevery:
         regk = self.registryKey(serder)
         pre = serder.pre
         ked = serder.ked
-        sn = ked["s"]
+        #sn = ked["s"]
         ilk = ked["t"]
 
         inceptive = ilk in (Ilks.vcp, Ilks.iss, Ilks.bis)
 
         # validate SN for
-        sn = validateSN(sn, inceptive=inceptive)
+        #sn = validateSN(sn, inceptive=inceptive)
+        sn = Number(numh=ked["s"]).validate(inceptive=inceptive).sn
 
         if not self.lax:
             if self.local:
@@ -1783,7 +1758,7 @@ class Tevery:
 
         # Load backers from either tsn or Kever of issuer
         cnfg = rsr.c
-        if TraitDex.NoBackers in cnfg:
+        if TraitDex.NoRegistrarBackers in cnfg:
             kevers = self.kevers[pre]
             baks = kevers.wits
         else:
