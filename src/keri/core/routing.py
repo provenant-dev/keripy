@@ -126,7 +126,7 @@ class Revery:
 
     """
 
-    TimeoutRPE = 3600000  # seconds to timeout reply message escrows
+    TimeoutRPE = 3600  # seconds to timeout reply message escrows
 
     def __init__(self, db, rtr=None, cues=None, lax=True, local=False):
         """
