@@ -95,7 +95,7 @@ class ExportDoer(doing.DoDoer):
         _ = (yield self.tock)
 
         if self.said is None:
-            for (said,), _ in self.rgy.reger.creds.getItemIter():
+            for (said,), _ in self.rgy.reger.saved.getItemIter():
                 self.outputCred(said=said)
 
         else:
