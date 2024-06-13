@@ -62,16 +62,18 @@ class Regery:
             regk = regord.registryKey
             pre = regord.prefix
 
-            hab = self.hby.habs[pre]
-            if hab is None:
-                raise kering.ConfigurationError(f"Unknown prefix {pre} for creating Registry {name}")
+            # Hot fix, for deleted AIDs
+            if pre in self.hby.habs:
+                hab = self.hby.habs[pre]
+                if hab is None:
+                    raise kering.ConfigurationError(f"Unknown prefix {pre} for creating Registry {name}")
 
-            reg = Registry(hab=hab, reger=self.reger, tvy=self.tvy, psr=self.psr,
-                           name=name, regk=regk, cues=self.cues)
+                reg = Registry(hab=hab, reger=self.reger, tvy=self.tvy, psr=self.psr,
+                            name=name, regk=regk, cues=self.cues)
 
-            reg.inited = True
-            self.regs[regk] = reg
-            self.reger.registries.add(regk)
+                reg.inited = True
+                self.regs[regk] = reg
+                self.reger.registries.add(regk)
 
     def makeRegistry(self, name, prefix, **kwa):
         hab = self.hby.habs[prefix]
