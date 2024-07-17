@@ -22,6 +22,9 @@ from ..core.coring import CtrDex
 from ..db import dbing
 from ..kering import Roles
 
+from ..help import helping
+import datetime
+
 logger = help.ogler.getLogger()
 
 
@@ -87,11 +90,11 @@ class Receiptor(doing.DoDoer):
         rcts = dict()
         for wit, client in clients.items():
             httping.streamCESRRequests(client=client, dest=wit, ims=bytearray(msg), path="/receipts")
-            while not client.responses:
+            end = helping.nowUTC() + datetime.timedelta(seconds=10)
+            while not client.responses and helping.nowUTC() < end:
                 yield self.tock
-
             rep = client.respond()
-            if rep.status == 200:
+            if rep is not None and rep.status == 200:
                 rct = bytearray(rep.body)
                 hab.psr.parseOne(bytearray(rct))
                 rserder = serdering.SerderKERI(raw=rct)
@@ -101,7 +104,10 @@ class Receiptor(doing.DoDoer):
                 coring.Counter(qb64b=rct, strip=True)
                 rcts[wit] = rct
             else:
-                logger.error(f"invalid response {rep.status} from witnesses {wit}")
+                if rep is not None:
+                    logger.error(f"invalid response {rep.status} from witnesses {wit}")
+                else:
+                    logger.error(f"no response from witness {wit}")
 
         for wit in rcts.keys():
             ewits = [w for w in rcts.keys() if w != wit]
