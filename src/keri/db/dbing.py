@@ -381,6 +381,7 @@ class LMDBer(filing.Filer):
 
         # open lmdb major database instance
         # creates files data.mdb and lock.mdb in .dbDirPath
+        print(f"Opening DB with map size: {self.MapSize}")
         self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=self.MapSize,
                              mode=self.perm, readonly=self.readonly)
         self.opened = True if opened and self.env else False
