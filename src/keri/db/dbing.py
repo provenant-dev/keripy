@@ -59,7 +59,10 @@ from hio.base import filing
 
 from hio.base import filing
 
+from .. import help
 from ..help import helping
+
+logger = help.ogler.getLogger()
 
 ProemSize = 32  # does not include trailing separator
 MaxProem = int("f"*(ProemSize), 16)
@@ -67,6 +70,8 @@ MaxON = int("f"*32, 16)  # largest possible ordinal number, sequence or first se
 
 SuffixSize = 32  # does not include trailing separator
 MaxSuffix = int("f"*(SuffixSize), 16)
+
+KERIDBMapSizeKey = "KERI_DB_MAP_SIZE"
 
 def dgKey(pre, dig):
     """
@@ -381,7 +386,13 @@ class LMDBer(filing.Filer):
 
         # open lmdb major database instance
         # creates files data.mdb and lock.mdb in .dbDirPath
-        print(f"Opening DB with map size: {self.MapSize}")
+        if (mapSize := os.getenv(KERIDBMapSizeKey)) is not None:
+            try:
+                self.MapSize = int(mapSize)
+            except ValueError:
+                logger.error("KERI_DB_MAP_SIZE must be an integer value >1!")
+                raise
+
         self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=self.MapSize,
                              mode=self.perm, readonly=self.readonly)
         self.opened = True if opened and self.env else False
