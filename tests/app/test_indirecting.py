@@ -4,15 +4,20 @@ tests.app.indirecting module
 
 """
 import json
+import time
 
-import falcon
-import hio
 import pytest
-from hio.core import tcp, http
+import falcon
+from falcon import testing
+
+import hio
+from hio.core import http
+from hio.base import doing, tyming
 from hio.help import decking
 
-from keri.app import indirecting, storing, habbing
-from keri.core import coring, serdering
+from keri import kering
+from keri.app import indirecting, storing, habbing, agenting
+from keri.core import serdering, coring
 
 
 def test_mailbox_iter():
@@ -150,6 +155,114 @@ def test_qrymailbox_iter():
         mb.iter.TimeoutMBX = 0  # Force the iter to timeout
         with pytest.raises(StopIteration):
             next(mbi)
+
+
+def test_wit_query_ends(seeder):
+    with habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
+            habbing.openHby(name="pal", salt=coring.Salter(raw=b'0123456789abcdef').qb64) as palHby:
+
+        wesDoers = indirecting.setupWitness(alias="wes", hby=wesHby, tcpPort=5634, httpPort=5644)
+        witDoer = agenting.Receiptor(hby=palHby)
+
+        wesHab = wesHby.habByName(name="wes")
+        seeder.seedWitEnds(palHby.db, witHabs=[wesHab], protocols=[kering.Schemes.http])
+
+        app = falcon.App()
+        query_endpoint = indirecting.QueryEnd(wesHab)
+        app.add_route("/query", query_endpoint)
+        
+        wesClient = testing.TestClient(app)
+
+        opts = dict(
+            wesHab=wesHab,
+            palHby=palHby,
+            witDoer=witDoer,
+            wesClient=wesClient
+        )
+
+        doers = wesDoers + [witDoer, doing.doify(wit_querier_test_do, **opts)]
+
+        limit = 1.0
+        tock = 0.03125
+        doist = doing.Doist(tock=tock, limit=limit, doers=doers)
+        doist.enter()
+
+        tymer = tyming.Tymer(tymth=doist.tymen(), duration=doist.limit)
+
+        while not tymer.expired:
+            doist.recur()
+            time.sleep(doist.tock)
+        # doist.do(doers=doers)
+
+        assert doist.limit == limit
+
+        doist.exit()
+
+
+def wit_querier_test_do(tymth=None, tock=0.0, **opts):
+    yield tock  # enter context
+
+    wesHab = opts["wesHab"]
+    palHby = opts["palHby"]
+    witDoer = opts["witDoer"]
+    wesClient = opts["wesClient"]
+
+    palHab = palHby.makeHab(name="pal", wits=[wesHab.pre], transferable=True)
+
+    assert palHab.pre == "EEWz3RVIvbGWw4VJC7JEZnGCLPYx4-QgWOwAzGnw-g8y"
+
+    witDoer.msgs.append(dict(pre=palHab.pre))
+    while not witDoer.cues:
+        yield tock
+
+    witDoer.cues.popleft()
+    msg = next(wesHab.db.clonePreIter(pre=palHab.pre))
+
+    # Test valid KEL query with 'pre'
+    res = wesClient.simulate_get("/query", params={"typ": "kel", "pre": palHab.pre})
+    assert res.status_code == 200
+    assert res.headers['Content-Type'] == "application/json+cesr"
+    assert bytearray(res.content) == bytearray(msg)
+
+    # Test KEL query without 'pre'
+    res = wesClient.simulate_get("/query", params={"typ": "kel"})
+    assert res.status_code == 400
+    assert res.headers['Content-Type'] == "application/json"
+    assert "'pre' query param is required" in res.text
+
+    # Test KEL query with 'sn' parameter
+    res = wesClient.simulate_get("/query", params={"typ": "kel", "pre": palHab.pre, "sn": 0})
+    assert res.status_code == 200
+    assert res.headers['Content-Type'] == "application/json+cesr"
+
+    # Test KEL query with non-existant 'sn' parameter
+    res = wesClient.simulate_get("/query", params={"typ": "kel", "pre": palHab.pre, "sn": 5})
+    assert res.status_code == 400
+    assert res.headers['Content-Type'] == "application/json"
+    assert "non-existant event at seq-num 5" in res.text
+
+    # Test valid TEL query with 'reg'
+    res = wesClient.simulate_get("/query", params={"typ": "tel", "reg": "mock_reg"})
+    assert res.status_code == 200
+    assert res.headers['Content-Type'] == "application/json+cesr"
+
+    # Test valid TEL query with 'vcid'
+    res = wesClient.simulate_get("/query", params={"typ": "tel", "vcid": "mock_vcid"})
+    assert res.status_code == 200
+    assert res.headers['Content-Type'] == "application/json+cesr"
+
+    # Test TEL query missing both 'reg' and 'vcid'
+    res = wesClient.simulate_get("/query", params={"typ": "tel"})
+    assert res.status_code == 400
+    assert res.headers['Content-Type'] == "application/json"
+    assert "Either 'reg' or 'vcid' query param is required for TEL query" in res.text
+
+    # Test invalid 'typ' parameter
+    res = wesClient.simulate_get("/query", params={"typ": "invalid"})
+    assert res.status_code == 400
+    assert res.headers['Content-Type'] == "application/json"
+    assert "unkown query type" in res.text
+
 
 
 class MockServerTls:
