@@ -15,6 +15,7 @@ from . import coring
 from .coring import MtrDex, Serials, Saider, Saids
 from .. import help, kering
 from ..kering import ValidationError, DeserializeError
+from functools import lru_cache
 
 logger = help.ogler.getLogger()
 
@@ -192,6 +193,18 @@ class JSONSchema:
 
         return True
 
+    @lru_cache(maxsize=2048)
+    @staticmethod
+    def verify_schema_str(schema_str):
+        """Cached version verify_schema() since we can't cache functions with dict as parameter"""
+        schema = json.loads(schema_str)
+        try:
+            jsonschema.Draft7Validator.check_schema(schema=schema)
+        except jsonschema.exceptions.SchemaError:
+            return False
+
+        return True
+
     @staticmethod
     def verify_schema(schema):
         """ Validate schema integrity
@@ -202,12 +215,7 @@ class JSONSchema:
         Parameters:
             schema (dict): is the JSON schema to verify
         """
-        try:
-            jsonschema.Draft7Validator.check_schema(schema=schema)
-        except jsonschema.exceptions.SchemaError:
-            return False
-
-        return True
+        return JSONSchema.verify_schema_str(json.dumps(schema))
 
     def verify_json(self, schema=b'', raw=b''):
         """ Verify the raw content against the schema for JSON that conforms to the schema
