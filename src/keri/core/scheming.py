@@ -15,6 +15,7 @@ from . import coring
 from .coring import MtrDex, Serials, Saider, Saids
 from .. import help, kering
 from ..kering import ValidationError, DeserializeError
+from functools import lru_cache
 
 logger = help.ogler.getLogger()
 
@@ -192,6 +193,7 @@ class JSONSchema:
 
         return True
 
+    @lru_cache(maxsize=2048)
     @staticmethod
     def verify_schema(schema):
         """ Validate schema integrity
