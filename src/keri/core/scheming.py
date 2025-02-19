@@ -193,18 +193,6 @@ class JSONSchema:
 
         return True
 
-    @staticmethod
-    def verify_schema(schema):
-        """ Validate schema integrity
-
-        Returns True if the provided schema validates successfully
-          as complaint Draft 7 JSON Schema False otherwise
-
-        Parameters:
-            schema (dict): is the JSON schema to verify
-        """
-        return verify_schema_str(json.dumps(schema))
-
     @lru_cache(maxsize=2048)
     @staticmethod
     def verify_schema_str(schema_str):
@@ -216,6 +204,18 @@ class JSONSchema:
             return False
 
         return True
+
+    @staticmethod
+    def verify_schema(schema):
+        """ Validate schema integrity
+
+        Returns True if the provided schema validates successfully
+          as complaint Draft 7 JSON Schema False otherwise
+
+        Parameters:
+            schema (dict): is the JSON schema to verify
+        """
+        return JSONSchema.verify_schema_str(json.dumps(schema))
 
     def verify_json(self, schema=b'', raw=b''):
         """ Verify the raw content against the schema for JSON that conforms to the schema
