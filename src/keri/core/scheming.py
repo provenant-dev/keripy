@@ -193,7 +193,6 @@ class JSONSchema:
 
         return True
 
-    @lru_cache(maxsize=2048)
     @staticmethod
     def verify_schema(schema):
         """ Validate schema integrity
@@ -204,6 +203,13 @@ class JSONSchema:
         Parameters:
             schema (dict): is the JSON schema to verify
         """
+        return verify_schema_str(json.dumps(schema))
+
+    @lru_cache(maxsize=2048)
+    @staticmethod
+    def verify_schema_str(schema_str):
+        """Cached version verify_schema() since we can't cache functions with dict as parameter"""
+        schema = json.loads(schema_str)
         try:
             jsonschema.Draft7Validator.check_schema(schema=schema)
         except jsonschema.exceptions.SchemaError:
