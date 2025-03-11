@@ -5,6 +5,8 @@ keri.vdr.credentialing module
 
 VC issuer support
 """
+from typing import Optional
+
 from hio.base import doing
 from hio.help import decking
 
@@ -234,7 +236,8 @@ class BaseRegistry:
         try:
             self.tvy.processEvent(serder=serder)
         except kering.MissingAnchorError:
-            logger.info("Credential registry missing anchor for inception = {}".format(serder.ked))
+            logger.info("Credential registry missing anchor for inception = {}".format(serder.said))
+            logger.debug("Inception body = {}".format(serder.pretty()))
 
     def anchorMsg(self, pre, regd, seqner, saider):
         """  Create key event with seal to serder anchored as data.
@@ -474,7 +477,7 @@ class SignifyRegistry(BaseRegistry):
             raise kering.ValidationError("Invalid revoke of {} that has not been issued "
                                          "pre={}.".format(vci, self.regk))
         ievt = self.reger.getTvt(dgKey(pre=vci, dig=vcser))
-        iserder = serdering.serderACDC(raw=bytes(ievt))  # Serder(raw=bytes(ievt))
+        iserder = serdering.SerderACDC(raw=bytes(ievt))  # Serder(raw=bytes(ievt))
 
         if self.noBackers:
             serder = eventing.revoke(vcdig=vci, regk=self.regk, dig=iserder.said, dt=dt)
@@ -772,7 +775,8 @@ class Credentialer(doing.DoDoer):
 
         super(Credentialer, self).__init__(doers=doers)
 
-    def create(self, regname, recp: str, schema, source, rules, data, private=False):
+    def create(self, regname, recp: str, schema, source, rules, data, private: bool = False,
+               private_credential_nonce: Optional[str] = None, private_subject_nonce: Optional[str] = None):
         """  Create and validate a credential returning the fully populated Creder
 
         Parameters:
@@ -782,7 +786,9 @@ class Credentialer(doing.DoDoer):
             source:
             rules:
             data:
-            private: add nonce for privacy preserving
+            private (bool): apply nonce used for privacy preserving ACDC
+            private_credential_nonce (Optional[str]): nonce used for privacy vc
+            private_subject_nonce (Optional[str]): nonce used for subject
 
         Returns:
             Creder: Creder class for the issued credential
@@ -803,6 +809,8 @@ class Credentialer(doing.DoDoer):
                                     data=data,
                                     source=source,
                                     private=private,
+                                    private_credential_nonce=private_credential_nonce,
+                                    private_subject_nonce=private_subject_nonce,
                                     rules=rules,
                                     status=registry.regk)
         self.validate(creder)
