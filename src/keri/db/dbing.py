@@ -62,16 +62,12 @@ from hio.base import filing
 import keri
 from ..help import helping
 
-logger = help.ogler.getLogger()
-
 ProemSize = 32  # does not include trailing separator
 MaxProem = int("f"*(ProemSize), 16)
 MaxON = int("f"*32, 16)  # largest possible ordinal number, sequence or first seen
 
 SuffixSize = 32  # does not include trailing separator
 MaxSuffix = int("f"*(SuffixSize), 16)
-
-KERIDBMapSizeKey = "KERI_DB_MAP_SIZE"
 
 def dgKey(pre, dig):
     """
