@@ -18,7 +18,7 @@ database will never have these flags set.
 So only need to set dupsort first time opened each other opening does not
 need to call it
 """
-
+import importlib
 import os
 import shutil
 from collections import namedtuple
@@ -30,11 +30,14 @@ import json
 import cbor2 as cbor
 import msgpack
 import lmdb
+import semver
 from ordered_set import OrderedSet as oset
 
 from hio.base import doing
 
+import keri
 from . import dbing, koming, subing
+from .dbing import splitKey, dgKey
 from .. import kering
 
 from ..core import coring, eventing, parsing, serdering
@@ -44,6 +47,11 @@ from ..help import helping
 
 
 logger = help.ogler.getLogger()
+
+MIGRATIONS = [
+    ("0.6.8", ["hab_data_rename"]),
+    ("1.0.0", ["add_key_and_reg_state_schemas"])
+]
 
 
 class dbdict(dict):
@@ -836,6 +844,10 @@ class Baser(dbing.LMDBer):
 
         # events as ordered by first seen ordinals
         self.fons = subing.CesrSuber(db=self, subkey='fons.', klas=coring.Seqner)
+
+        self.migs = subing.CesrSuber(db=self, subkey="migs.", klas=coring.Dater)
+        self.vers = subing.Suber(db=self, subkey="vers.")
+
         # Kever state made of KeyStateRecord key states
         self.states = koming.Komer(db=self,
                                    schema=KeyStateRecord,
@@ -893,7 +905,7 @@ class Baser(dbing.LMDBer):
         self.ends = koming.Komer(db=self, subkey='ends.',
                                  schema=EndpointRecord, )
 
-        # service endpont locations keyed by eid.scheme  (endpoint identifier)
+        # service endpoint locations keyed by eid.scheme  (endpoint identifier)
         # data extracted from reply loc
         self.locs = koming.Komer(db=self,
                                  subkey='locs.',
@@ -1025,12 +1037,14 @@ class Baser(dbing.LMDBer):
 
         # Global settings for the Habery environment
         self.hbys = subing.Suber(db=self, subkey='hbys.')
+
         # Signed contact data, keys by prefix
         self.cons = subing.Suber(db=self,
                                  subkey="cons.")
 
         # Transferable signatures on contact data
         self.ccigs = subing.CesrSuber(db=self, subkey='ccigs.', klas=coring.Cigar)
+
         # Chunked image data for contact information for remote identifiers
         self.imgs = self.env.open_db(key=b'imgs.')
 
@@ -1068,6 +1082,10 @@ class Baser(dbing.LMDBer):
         Reload stored prefixes and Kevers from .habs
 
         """
+        # Check migrations to see if this database is up to date.  Error otherwise
+        if not self.current:
+            raise kering.DatabaseError(f"Database migrations must be run. DB version {self.version}; current {keri.__version__}")
+
         removes = []
         for keys, data in self.habs.getItemIter():
             if (ksr := self.states.get(keys=data.hid)) is not None:
@@ -1107,6 +1125,174 @@ class Baser(dbing.LMDBer):
         for keys in removes:  # remove bare .habs records
             self.nmsp.rem(keys=keys)
 
+    def migrate(self):
+        """ Run all migrations required
+
+        Run all migrations  that are required from the current version of database up to the current version
+         of the software that have not already been run.
+
+         Sets the version of the database to the current version of the software after successful completion
+         of required migrations
+
+        """
+        for (version, migrations) in MIGRATIONS:
+            # Only run migration if current source code version is at or below the migration version
+            ver = semver.VersionInfo.parse(keri.__version__)
+            ver_no_prerelease = semver.Version(ver.major, ver.minor, ver.patch)
+            if self.version is not None and semver.compare(version, str(ver_no_prerelease)) > 0:
+                print(f"Skipping migration {version} as higher than the current KERI version {keri.__version__}")
+                continue
+            # Check to see if migration version is for an older database version
+            if self.version is not None and semver.compare(version, self.version) != 1:
+                continue
+            print(f"Migrating database v{self.version} --> v{version} ...")
+
+            for migration in migrations:
+                modName = f"keri.db.migrations.{migration}"
+                if self.migs.get(keys=(migration,)) is not None:
+                    continue
+
+                mod = importlib.import_module(modName)
+                try:
+                    mod.migrate(self)
+                except Exception as e:
+                    print(f"\nAbandoning migration {migration} at version {version} with error: {e}")
+                    return
+
+                self.migs.pin(keys=(migration,), val=coring.Dater())
+
+            # update database version after successful migration
+            self.version = version
+
+        self.version = keri.__version__
+
+    def clearEscrows(self):
+        """
+        Clear all escrows
+        """
+        count = 0
+        for (k, _) in self.getUreItemIter():
+            count += 1
+            self.delUres(key=k)
+        logger.info(f"KEL: Cleared {count} unverified receipt escrows")
+
+        count = 0
+        for (k, _) in self.getVreItemIter():
+            count += 1
+            self.delVres(key=k)
+        logger.info(f"KEL: Cleared {count} verified receipt escrows")
+
+        count = 0
+        for (k, _) in self.getPseItemsNextIter():
+            count += 1
+            self.delPses(key=k)
+        logger.info(f"KEL: Cleared {count} partially signed escrows")
+
+        count = 0
+        for (k, _) in self.getPweItemIter():
+            count += 1
+            self.delPwes(key=k)
+        logger.info(f"KEL: Cleared {count} partially witnessed escrows")
+
+        count = 0
+        for (k, _) in self.getUweItemIter():
+            count += 1
+            self.delUwes(key=k)
+        logger.info(f"KEL: Cleared {count} unverified event indexed escrowed couples")
+
+        count = 0
+        for (k, _) in self.getOoeItemIter():
+            count += 1
+            self.delOoes(key=k)
+        logger.info(f"KEL: Cleared {count} out of order escrows")
+
+        count = 0
+        for (k, _) in self.getLdeItemIter():
+            count += 1
+            self.delLdes(key=k)
+        logger.info(f"KEL: Cleared {count} likely duplicitous escrows")
+
+        count = 0
+        for k, _ in self.getQnfItemsNextIter():
+            self.delQnfs(key=k)
+        logger.info(f"KEL: Cleared {count} query not found escrows")
+
+        count = 0
+        for (key, _) in self.getPdeItemsNextIter():
+            count += 1
+            self.delPde(key=key)
+        logger.info(f"KEL: Cleared {count} partially delegated key event escrows")
+
+        for name, escrow, desc in [
+            ('rpes',  self.rpes,  'reply escrows'),
+            ('eoobi', self.eoobi, 'failed, retryable OOBI escrow'),
+            ('gpwe',  self.gpwe,  'group partial witness escrow'),
+            ('gdee',  self.gdee,  'group delegate escrow'),
+            ('dpwe',  self.dpwe,  'delegated partial witness escrow'),
+            ('gpse',  self.gpse,  'group partial signature escrow'),
+            ('epse',  self.epse,  'exchange partial signature escrow'),
+            ('dune',  self.dune,  'delegated unanchored escrow')]:
+            count = escrow.cntAll()
+            escrow.trim()
+            logger.info(f"KEL: Cleared {count} escrows from ({name.ljust(5)}): {desc}")
+
+        logger.info("Cleared KEL escrows")
+
+    @property
+    def current(self):
+        """ Current property determines if we are at the current database migration state.
+
+         If the database version matches the library version return True
+         If the current database version is behind the current library version, check for migrations
+            - If there are migrations to run, return False
+            - If there are no migrations to run, reset database version to library version and return True
+         If the current database version is ahead of the current library version, raise exception
+
+         """
+        if self.version == keri.__version__:
+            return True
+
+        # If database version is ahead of library version, throw exception
+        ver = semver.VersionInfo.parse(keri.__version__)
+        ver_no_prerelease = semver.Version(ver.major, ver.minor, ver.patch)
+        if self.version is not None and semver.compare(self.version, str(ver_no_prerelease)) == 1:
+            raise kering.ConfigurationError(
+                f"Database version={self.version} is ahead of library version={keri.__version__}")
+
+        last = MIGRATIONS[-1]
+        # If we aren't at latest version, but there are no outstanding migrations,
+        # reset version to latest (rightmost (-1) migration is latest)
+        if self.migs.get(keys=(last[1][-1],)) is not None:
+            return True
+
+        # We have migrations to run
+        return False
+
+    def complete(self, name=None):
+        """ Returns list of tuples of migrations completed with date of completion
+
+        Parameters:
+            name(str): optional name of migration to check completeness
+
+        Returns:
+            list: tuples of migration,date of completed migration names and the date of completion
+
+        """
+        migrations = []
+        if not name:
+            for version, migs in MIGRATIONS:
+                # Only get migration completion dates for migrations that have been run
+                if self.version is not None and semver.compare(version, self.version) <= 0:
+                    for mig in migs:
+                        dater = self.migs.get(keys=(mig,))
+                        migrations.append((mig, dater))
+        else:
+            for version, migs in MIGRATIONS:  # check all migrations for each version
+                if name not in migs or not self.migs.get(keys=(name,)):
+                    raise ValueError(f"No migration named {name}")
+            migrations.append((name, self.migs.get(keys=(name,))))
+
+        return migrations
 
     def clean(self):
         """
@@ -1269,6 +1455,9 @@ class Baser(dbing.LMDBer):
             atc.extend(coring.Counter(code=coring.CtrDex.SealSourceCouples,
                                       count=1).qb64b)
             atc.extend(couple)
+        elif self.kevers[pre].delegated:
+            if serdering.SerderKERI(raw=bytes(raw)).estive:
+                raise kering.MissingEntryError("Missing delegator anchor seal for dig={}.".format(dig))
 
         # add trans receipts quadruples to attachments
         if quads := self.getVrcs(key=dgkey):
@@ -2033,6 +2222,20 @@ class Baser(dbing.LMDBer):
         """
         return self.getIoValLast(self.ures, key)
 
+    def getUreItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of partial signed escrowed event triple items at next
+        key after key.
+        Items is (key, val) where proem has already been stripped from val
+        val is triple dig+pre+cig
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.ures, key)
+
     def getUreItemsNext(self, key=b'', skip=True):
         """
         Use snKey()
@@ -2199,6 +2402,20 @@ class Baser(dbing.LMDBer):
         Duplicates are retrieved in insertion order.
         """
         return self.getIoValLast(self.vres, key)
+
+    def getVreItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of partial signed escrowed event quintuple items at next
+        key after key.
+        Items is (key, val) where proem has already been stripped from val
+        val is Quinlet is edig + spre + ssnu + sdig +sig
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.vres, key)
 
     def getVreItemsNext(self, key=b'', skip=True):
         """
@@ -2509,6 +2726,24 @@ class Baser(dbing.LMDBer):
         """
         return self.getVal(self.pdes, key)
 
+    def getPdes(self, key):
+        """
+        Use dgKey()
+        Return list of out of order escrow event dig vals at key
+        Returns empty list if no entry at key
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getIoVals(self.pdes, key)
+
+    def getPdeItemsNextIter(self, key=b'', skip=True):
+        """
+        Use dgKey()
+        Return list of witnessed signed escrowed event dig vals at key
+        Returns empty list if no entry at key
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getIoItemsNextIter(self.pdes, key, skip)
+
     def delPde(self, key):
         """
         Use dgKey()
@@ -2563,6 +2798,18 @@ class Baser(dbing.LMDBer):
         Duplicates are retrieved in insertion order.
         """
         return self.getIoValLast(self.pwes, key)
+
+    def getPweItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of partial witnessed escrowed event dig items at next key after key.
+        Items is (key, val) where proem has already been stripped from val
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.pwes, key)
 
     def getPweItemsNext(self, key=b'', skip=True):
         """
@@ -2668,6 +2915,20 @@ class Baser(dbing.LMDBer):
         """
         return self.getIoValLast(self.uwes, key)
 
+    def getUweItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of partial signed escrowed receipt couple items at next
+        key after key.
+        Items is (key, val) where proem has already been stripped from val
+        val is couple edig+wig
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.uwes, key)
+
     def getUweItemsNext(self, key=b'', skip=True):
         """
         Use snKey()
@@ -2761,6 +3022,18 @@ class Baser(dbing.LMDBer):
         Duplicates are retrieved in insertion order.
         """
         return self.getIoValLast(self.ooes, key)
+
+    def getOoeItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of out of order escrowed event dig items at next key after key.
+        Items is (key, val) where proem has already been stripped from val
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.ooes, key)
 
     def getOoeItemsNext(self, key=b'', skip=True):
         """
@@ -3017,6 +3290,18 @@ class Baser(dbing.LMDBer):
         Duplicates are retrieved in insertion order.
         """
         return self.getIoValLast(self.ldes, key)
+
+    def getLdeItemIter(self, key=b''):
+        """
+        Use sgKey()
+        Return iterator of likely duplicitous escrowed event dig items at next key after key.
+        Items is (key, val) where proem has already been stripped from val
+        If key is b'' empty then returns dup items at first key.
+        If skip is False and key is not b'' empty then returns dup items at key
+        Raises StopIteration Error when empty
+        Duplicates are retrieved in insertion order.
+        """
+        return self.getTopIoDupItemIter(self.ldes, key)
 
     def getLdeItemsNext(self, key=b'', skip=True):
         """

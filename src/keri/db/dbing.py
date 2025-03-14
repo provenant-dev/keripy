@@ -59,10 +59,8 @@ from hio.base import filing
 
 from hio.base import filing
 
-from .. import help
+import keri
 from ..help import helping
-
-logger = help.ogler.getLogger()
 
 ProemSize = 32  # does not include trailing separator
 MaxProem = int("f"*(ProemSize), 16)
@@ -70,8 +68,6 @@ MaxON = int("f"*32, 16)  # largest possible ordinal number, sequence or first se
 
 SuffixSize = 32  # does not include trailing separator
 MaxSuffix = int("f"*(SuffixSize), 16)
-
-KERIDBMapSizeKey = "KERI_DB_MAP_SIZE"
 
 def dgKey(pre, dig):
     """
@@ -86,7 +82,7 @@ def dgKey(pre, dig):
     return (b'%s.%s' %  (pre, dig))
 
 
-def onKey(pre, sn):
+def onKey(pre, sn, *, sep=b'.'):
     """
     Returns bytes DB key from concatenation with '.' of qualified Base64 prefix
     bytes pre and int ordinal number of event, such as sequence number or first
@@ -94,7 +90,7 @@ def onKey(pre, sn):
     """
     if hasattr(pre, "encode"):
         pre = pre.encode("utf-8")  # convert str to bytes
-    return (b'%s.%032x' % (pre, sn))
+    return (b'%s%s%032x' % (pre, sep, sn))
 
 snKey = onKey  # alias so intent is clear, sn vs fn
 fnKey = onKey  # alias so intent is clear, sn vs fn
@@ -141,7 +137,7 @@ def splitKey(key, sep=b'.'):
     return tuple(splits)
 
 
-def splitKeyON(key):
+def splitKeyON(key, *, sep=b'.'):
     """
     Returns list of pre and int on from key
     Accepts either bytes or str key
@@ -149,9 +145,12 @@ def splitKeyON(key):
     """
     if isinstance(key, memoryview):
         key = bytes(key)
-    pre, on = splitKey(key)
+    top, on = splitKey(key, sep=sep)
     on = int(on, 16)
-    return (pre, on)
+    return (top, on)
+
+splitSnKey = splitKeyON # alias so intent is clear, sn vs fn; backport of 1.2.x alias
+splitFnKey = splitKeyON # alias so intent is clear, sn vs fn; backport of 1.2.x alias
 
 splitKeySN = splitKeyON  # alias so intent is clear, sn vs fn
 splitKeyFN = splitKeyON  # alias so intent is clear, sn vs fn
@@ -351,6 +350,7 @@ class LMDBer(filing.Filer):
 
         """
         self.env = None
+        self._version = None
         self.readonly = True if readonly else False
         super(LMDBer, self).__init__(**kwa)
 
@@ -380,24 +380,58 @@ class LMDBer(filing.Filer):
             readonly (bool): True means open database in readonly mode
                                 False means open database in read/write mode
         """
+        exists = self.exists(name=self.name, base=self.base)
         opened = super(LMDBer, self).reopen(**kwa)
         if readonly is not None:
             self.readonly = readonly
 
         # open lmdb major database instance
         # creates files data.mdb and lock.mdb in .dbDirPath
-        if (mapSize := os.getenv(KERIDBMapSizeKey)) is not None:
-            try:
-                self.MapSize = int(mapSize)
-            except ValueError:
-                logger.error("KERI_DB_MAP_SIZE must be an integer value >1!")
-                raise
-
-        self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=self.MapSize,
+        map_size = os.getenv("KERI_LMDB_MAP_SIZE", '4294967296')  # 4GB
+        try:
+            map_size = int(map_size)
+        except ValueError:
+            map_size = 4 * 1024**3  # 4GB
+        self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=map_size,
                              mode=self.perm, readonly=self.readonly)
+
         self.opened = True if opened and self.env else False
+
+        if self.opened and not self.readonly and (not exists or self.temp):
+            self.version = keri.__version__
+
         return self.opened
 
+
+
+    @property
+    def version(self):
+        """ Return the version of database stored in __version__ key.
+
+        This value is read through cached in memory
+
+        Returns:
+            str: the version of the database or None if not set in the database
+
+        """
+        if self._version is None:
+            self._version = self.getVer()
+
+        return self._version
+
+    @version.setter
+    def version(self, val):
+        """  Set the version of the database in memory and in the __version__ key
+
+        Parameters:
+            val (str): The new semver formatted version of the database
+
+        """
+        if hasattr(val, "decode"):
+            val = val.decode("utf-8")  # convert bytes to str
+
+        self._version = val
+        self.setVer(self._version)
 
     def close(self, clear=False):
         """
@@ -413,7 +447,33 @@ class LMDBer(filing.Filer):
 
         self.env = None
 
-        return(super(LMDBer, self).close(clear=clear))
+        return (super(LMDBer, self).close(clear=clear))
+
+    def getVer(self):
+        """ Returns the value of the the semver formatted version in the __version__ key in this database
+
+        Returns:
+            str: semver formatted version of the database
+
+        """
+        with self.env.begin() as txn:
+            cursor = txn.cursor()
+            version = cursor.get(b'__version__')
+            return version.decode("utf-8") if version is not None else None
+
+    def setVer(self, val):
+        """  Set the version of the database in the __version__ key
+
+        Parameters:
+            val (str): The new semver formatted version of the database
+
+        """
+        if hasattr(val, "encode"):
+            val = val.encode("utf-8")  # convert str to bytes
+
+        with self.env.begin(write=True) as txn:
+            cursor = txn.cursor()
+            cursor.replace(b'__version__', val)
 
 
     # For subdbs with no duplicate values allowed at each key. (dupsort==False)
@@ -606,6 +666,71 @@ class LMDBer(filing.Filer):
                     ckey, cval = cursor.item()  # cursor now at next item after deleted
             return result
 
+    # ported from OnIoDupSuber
+    def getOnIoDupItemIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """
+        Returns iterator of triples (key, on, val), at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Returned items are triples of (key, on, val)
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        for key, on, val in self.getOnItemIter(db=db, key=key, on=on, sep=sep):
+            val = val[33:]  # strip proem
+            yield (key, on, val)
+
+    # ported from OnSuberBase
+    def getOnItemIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """
+        Returns iterator of triples (key, on, val), at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Returned items are triples of (key, on, val)
+        When dupsort==true then duplicates are included in items since .iternext
+        includes duplicates.
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val with same
+                key but increments of on beginning with on
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        with self.env.begin(db=db, write=False, buffers=True) as txn:
+            cursor = txn.cursor()
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:  # empty
+                onkey = key
+            if not cursor.set_range(onkey):  # moves to val at key >= onkey
+                return  # no values end of db raises StopIteration
+
+            for ckey, cval in cursor.iternext():  # get key, val at cursor
+                ckey, cn = splitKeyON(ckey, sep=sep)
+                if key and not ckey == key:
+                    break
+                yield (ckey, cn, cval)
 
     # For subdbs with no duplicate values allowed at each key. (dupsort==False)
     # and use keys with ordinal as monotonically increasing number part
@@ -1582,6 +1707,51 @@ class LMDBer(filing.Filer):
                 raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
                                " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
             return count
+
+    def getTopIoDupItemIter(self, db, top=b''):
+        """
+        Iterates over top branch of db given by key of IoDup items where each value
+        has 33 byte insertion ordinal number proem (prefixed) with separator.
+        Automagically removes (strips) proem before returning items.
+
+        Assumes DB opened with dupsort=True
+
+        Returns:
+            items (abc.Iterator): iterator of (full key, val) tuples of all
+            dup items  over a branch of the db given by top key where returned
+            full key is full database key for val not truncated top key.
+            Item is (key, val) with proem stripped from val stored in db.
+            If key = b'' then returns list of dup items for all keys in db.
+
+
+        Because cursor.iternext() advances cursor after returning item its safe
+        to delete the item within the iteration loop. curson.iternext() works
+        for both dupsort==False and dupsort==True
+
+        Raises StopIteration Error when empty.
+
+        Parameters:
+            db (lmdb._Database): instance of named sub db with dupsort==False
+            top (bytes): truncated top key, a key space prefix to get all the items
+                        from multiple branches of the key space. If top key is
+                        empty then gets all items in database
+
+        Duplicates at a given key preserve insertion order of duplicate.
+        Because lmdb is lexocographic an insertion ordering proem is prepended to
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
+        """
+        for top, val in self.getTopItemIter(db=db, key=top):
+            val = val[33:] # strip proem
+            yield (top, val)
 
 
     def delIoVals(self, db, key):

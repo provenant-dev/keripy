@@ -92,8 +92,10 @@ class Exchanger:
                 if not tholder.satisfy(indices):  # We still don't have all the sigers, need to escrow
                     if self.escrowPSEvent(serder=serder, tsgs=tsgs, pathed=pathed):
                         self.cues.append(dict(kin="query", q=dict(r="logs", pre=prefixer.qb64, sn=seqner.snh)))
-                    raise MissingSignatureError(f"Not enough signatures in  {indices}"
-                                                f" for evt = {serder.ked}.")
+                    msg = f"Not enough signatures in {indices} for evt = {serder.said}"
+                    logger.info(msg)
+                    logger.debug(f"Event body=\n%20\n", serder.pretty())
+                    raise MissingSignatureError(msg)
 
         elif cigars is not None:
             for cigar in cigars:
@@ -121,11 +123,12 @@ class Exchanger:
         # Perform behavior specific verification, think IPEX chaining requirements
         try:
             if not behavior.verify(serder=serder, attachments=attachments):
-                logger.info(f"exn event for route {route} failed behavior verfication.  exn={serder.ked}")
+                logger.info(f"exn event for route {route} failed behavior verification. exn={serder.said}")
+                logger.debug(f"exn body=\n{serder.ked}\n")
                 return
-
         except AttributeError:
-            logger.info(f"Behavior for {route} missing or does not have verify for exn={serder.ked}")
+            logger.debug(f"Behavior for {route} missing or does not have verify for exn={serder.said}")
+            logger.debug(f"exn Body=\n{serder.ked}\n")
 
         # Always persis events
         self.logEvent(serder, pathed, tsgs, cigars)
@@ -135,7 +138,9 @@ class Exchanger:
         try:
             behavior.handle(serder=serder, attachments=attachments)
         except AttributeError:
-            logger.info(f"Behavior for {route} missing or does not have handle for exn={serder.ked}")
+            logger.debug(f"Behavior for {route} missing or does not have handle for exn={serder.said}")
+            logger.debug(
+                f"exn body=\n{serder.ked}\n")
 
     def processEscrow(self):
         """ Process all escrows for `exn` messages
@@ -187,24 +192,21 @@ class Exchanger:
 
             try:
                 self.processEvent(serder=serder, tsgs=tsgs, pathed=pathed)
-
             except MissingSignatureError as ex:
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.info("Exchange partially signed unescrow failed: %s\n", ex.args[0])
-                else:
-                    logger.info("Exchange partially signed failed: %s\n", ex.args[0])
+                logger.trace("Exchange partially signed unescrow failed: %s\n", ex.args[0])
+                if logger.isEnabledFor(logging.TRACE):
+                    logger.debug("Event body=\n%s\n", serder.pretty())
             except Exception as ex:
                 self.hby.db.epse.rem(dig)
                 self.hby.db.esigs.rem(dig)
+                logger.info("Exchange partially signed unescrowed: %s\n", ex.args[0])
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.info("Exchange partially signed unescrowed: %s\n", ex.args[0])
-                else:
-                    logger.info("Exchange partially signed unescrowed: %s\n", ex.args[0])
+                    logger.debug("Event body=\n%s\n", serder.pretty())
             else:
                 self.hby.db.epse.rem(dig)
                 self.hby.db.esigs.rem(dig)
-                logger.info("Exchanger unescrow succeeded in valid exchange: "
-                            "creder=\n%s\n", serder.pretty())
+                logger.info("Exchanger unescrow succeeded in valid exchange: serder = %s", serder.said)
+                logger.debug("Serder Body=\n%s\n", serder.pretty())
 
     def logEvent(self, serder, pathed=None, tsgs=None, cigars=None):
         dig = serder.said
@@ -226,6 +228,15 @@ class Exchanger:
             self.hby.db.erpy.pin(keys=(pdig,), val=saider)
 
         self.hby.db.exns.put(keys=(dig,), val=serder)
+        # special handling for 1.1.18 -> 1.1.32
+        recipient = None
+        if 'rp' in serder.ked:
+            recipient = serder.ked['rp']
+        sender = serder.ked['i']
+        route = serder.ked['r']
+        logger.info("Saved exn event route = %s SAID = %s sender %s -> recipient %s",
+                    route, dig, sender, recipient)
+        logger.debug("EXN Event Body=\n%s\n", serder.pretty())
 
     def lead(self, hab, said):
         """ Determines is current member represented by hab is the lead of an exn message
@@ -338,6 +349,7 @@ def exchange(route,
                t=ilk,
                d="",
                i=sender,
+               rp="",
                p=p,
                dt=dt,
                r=route,
@@ -479,8 +491,10 @@ def verify(hby, serder):
         _, indices = eventing.verifySigs(serder.raw, sigers, verfers)
 
         if not tholder.satisfy(indices):  # We still don't have all the sigers, need to escrow
-            raise MissingSignatureError(f"Not enough signatures in  {indices}"
-                                        f" for evt = {serder.ked}.")
+            msg = f"Not enough signatures in {indices} for evt = {serder.said}"
+            logger.info("exchanging.verify: %s", msg)
+            logger.debug(f"Event body=\n%s\n", serder.pretty())
+            raise MissingSignatureError(msg)
         accepted = True
 
     cigars = hby.db.ecigs.get(keys=(serder.said,))
