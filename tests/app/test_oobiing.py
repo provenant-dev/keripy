@@ -3,29 +3,25 @@
 tests.app.test_multisig module
 
 """
-import json
 
 import falcon
-from falcon import testing
 from hio.base import doing
+from hio.core import http
 
 import keri
-from hio.core import http
+from keri import help, kering, core
 from keri.app import habbing, oobiing, notifying
-from keri.core import coring, parsing, serdering
+from keri.core import serdering, eventing, parsing, routing
 from keri.db import basing
 from keri.end import ending
 from keri.help import helping
-from keri import help, kering
 from keri.peer import exchanging
-
-from tests.app import openMultiSig
 
 
 def test_oobi_share(mockHelpingNowUTC):
     oobi = "http://127.0.0.1:5642/oobi/Egw3N07Ajdkjvv4LB2Mhx2qxl6TOCFdWNJU6cYR_ImFg/witness" \
            "/BGKVzj4ve0VSd8z_AmvhLg4lqcC_9WYX90k03q-R_Ydo?name=Phil"
-    with habbing.openHab(name="test", temp=True) as (hby, hab):
+    with habbing.openHab(name="test", temp=True, salt=b'0123456789abcdef') as (hby, hab):
         exc = exchanging.Exchanger(hby=hby, handlers=[])
         notifier = notifying.Notifier(hby=hby)
 
@@ -55,21 +51,23 @@ def test_oobi_share(mockHelpingNowUTC):
 
         exn, atc = oobiing.oobiRequestExn(hab=hab, dest="EO2kxXW0jifQmuPevqg6Zpi3vE-WYoj65i_XhpruWtOg",
                                           oobi="http://127.0.0.1/oobi")
-        assert exn.ked == {'v': 'KERI10JSON000136_', 't': 'exn', 'd': 'EII7EvdWFqv0jkjRv10t01zAUcRYbjVhZ_yo3VPZEbpS',
+        assert exn.ked == {'a': {'dest': 'EO2kxXW0jifQmuPevqg6Zpi3vE-WYoj65i_XhpruWtOg',
+                                 'oobi': 'http://127.0.0.1/oobi'},
+                           'd': 'EII7EvdWFqv0jkjRv10t01zAUcRYbjVhZ_yo3VPZEbpS',
+                           'dt': '2021-01-01T00:00:00.000000+00:00',
+                           'e': {},
                            'i': 'EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3',
                            'rp': '',
                            'p': '',
                            'dt': '2021-01-01T00:00:00.000000+00:00',
                            'r': '/oobis',
-                           'q': {},
-                           'a': {
-                               'dest': 'EO2kxXW0jifQmuPevqg6Zpi3vE-WYoj65i_XhpruWtOg',
-                               'oobi': 'http://127.0.0.1/oobi'},
-                           'e': {}
-                           }
-        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg'
-                       b'-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAAAAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3'
-                       b'-AABAABdw3eSw_7BW2o3z1ufxxs1CPgX1TgtJzn-MxvMjLYTidUd8KSxNKbPU9M3A4orYJDMGMIzhabHJmKA4ZIGbcgK')
+                           'rp': '',
+                           't': 'exn',
+                           'v': 'KERI10JSON000136_'}
+        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAA'
+                       b'AAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3-AABAABdw3eS'
+                       b'w_7BW2o3z1ufxxs1CPgX1TgtJzn-MxvMjLYTidUd8KSxNKbPU9M3A4orYJDMGMIz'
+                       b'habHJmKA4ZIGbcgK')
 
 
 def test_oobiery():
@@ -131,6 +129,68 @@ def test_oobiery():
         doist.exit()
 
     """Done Test"""
+
+
+def test_introduce(mockHelpingNowUTC):
+    raw = b'\x05\xaa\x8f-S\x9a\xe9\xfaU\x9c\x02\x9c\x9b\x08Hu'
+    salt = core.Salter(raw=raw).qb64
+    assert salt == '0AAFqo8tU5rp-lWcApybCEh1'
+    # makHab uses stem=name to make different names have differnt AID pre
+    with (habbing.openHby(name="wat", base="test", salt=salt) as watHby,
+          habbing.openHby(name="wit", base="test", salt=salt) as witHby):
+        # setup Wes's habitat nontrans
+        watHab = watHby.makeHab(name='wes', isith="1", icount=1, transferable=False)
+        assert not watHab.kever.prefixer.transferable
+        assert watHab.pre == "BBVDlgWic_rAf-m_v7vz_VvIYAUPErvZgLTfXGNrFRom"
+        watKvy = eventing.Kevery(db=watHab.db, lax=False, local=False)
+        watPsr = parsing.Parser(kvy=watKvy)
+
+        # setup Wok's habitat nontrans
+        witHab = witHby.makeHab(name='wok', isith="1", icount=1, transferable=False)
+        assert not witHab.kever.prefixer.transferable
+        assert witHab.pre == "BKVb58uITf48YoMPz8SBOTVwLgTO9BY4oEXRPoYIOErX"
+        witKvy = eventing.Kevery(db=witHab.db, lax=False, local=False)
+
+        rtr = routing.Router()
+        rvy = routing.Revery(db=witHby.db, rtr=rtr)
+        oobiing.Oobiery(hby=witHby, rvy=rvy)
+        witPsr = parsing.Parser(kvy=witKvy, rvy=rvy)
+        assert witHby.db.oobis.cntAll() == 0
+
+        oobi = f"https://localhost:8989/oobi/{watHab.pre}/controller"
+        data = dict(
+            cid=watHab.pre,
+            oobi=oobi
+        )
+
+        msg = watHab.reply(route="/introduce", data=data)
+        assert msg == (b'{"v":"KERI10JSON000127_","t":"rpy","d":"EPEU3V7e2d2mhMWVFDS-oC9z'
+                       b'Q8DX8t6ELkhINIaYGFNZ","dt":"2021-01-01T00:00:00.000000+00:00","r'
+                       b'":"/introduce","a":{"cid":"BBVDlgWic_rAf-m_v7vz_VvIYAUPErvZgLTfX'
+                       b'GNrFRom","oobi":"https://localhost:8989/oobi/BBVDlgWic_rAf-m_v7v'
+                       b'z_VvIYAUPErvZgLTfXGNrFRom/controller"}}-VAi-CABBBVDlgWic_rAf-m_v'
+                       b'7vz_VvIYAUPErvZgLTfXGNrFRom0BBqF8yHDeXpzDUNIOsDBGezNBdgHafmOYbQ7'
+                       b'qw0R5t89FbLA26RwaA3NF9-dU0JpbNuJs7jiEBYbSGeDkbBDDEM')
+
+        witPsr.parseOne(ims=msg)
+        assert witHby.db.oobis.cntAll() == 1
+        obr = witHby.db.oobis.get(keys=(oobi,))
+        assert obr.cid == watHab.pre
+
+        # Send one missing fields
+        data = dict(cid=watHab.pre)
+        msg = watHab.reply(route="/introduce", data=data)
+        witPsr.parseOne(ims=msg)
+        assert witHby.db.oobis.cntAll() == 1  # Still one because of the missing 'oobi' field
+
+        # Send one bad scheme
+        data = dict(cid=watHab.pre, oobi="ftp://localhost")
+        msg = watHab.reply(route="/introduce", data=data)
+        witPsr.parseOne(ims=msg)
+        assert witHby.db.oobis.cntAll() == 1  # Still one because of the missing 'oobi' field
+
+
+
 
 
 class MOOBIEnd:

@@ -26,7 +26,7 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--role", "-r", help="KERI enpoint authorization role.",
                     required=True)
@@ -75,7 +75,7 @@ class RoleDoer(doing.DoDoer):
 
         super(RoleDoer, self).__init__(doers=self.toRemove + [doing.doify(self.roleDo)])
 
-    def roleDo(self, tymth, tock=0.0):
+    def roleDo(self, tymth, tock=0.0, **kwa):
         """ Export any end reply messages previous saved for the provided AID
 
         Parameters:

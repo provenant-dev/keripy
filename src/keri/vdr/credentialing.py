@@ -11,7 +11,8 @@ from hio.base import doing
 from hio.help import decking
 
 from keri.vdr import viring
-from .. import kering, help
+from .. import help
+from .. import kering, core
 from ..app import agenting
 from ..app.habbing import GroupHab
 from ..core import parsing, coring, scheming, serdering
@@ -236,8 +237,8 @@ class BaseRegistry:
         try:
             self.tvy.processEvent(serder=serder)
         except kering.MissingAnchorError:
-            logger.info("Credential registry missing anchor for inception = {}".format(serder.said))
-            logger.debug("Inception body = {}".format(serder.pretty()))
+            logger.info("Credential registry missing anchor for inception = %s", serder.said)
+            logger.debug("event=\n%s\n", serder.pretty())
 
     def anchorMsg(self, pre, regd, seqner, saider):
         """  Create key event with seal to serder anchored as data.
@@ -653,7 +654,7 @@ class Registrar(doing.DoDoer):
         said = self.rgy.reger.ctel.get(keys=(pre, seqner.qb64))
         return said is not None and self.witPub.sent(said=pre)
 
-    def escrowDo(self, tymth, tock=1.0):
+    def escrowDo(self, tymth, tock=1.0, **kwa):
         """ Process escrows of group multisig identifiers waiting to be compeleted.
 
         Steps involve:
@@ -879,7 +880,7 @@ class Credentialer(doing.DoDoer):
     def complete(self, said):
         return self.rgy.reger.ccrd.get(keys=(said,)) is not None
 
-    def escrowDo(self, tymth, tock=1.0):
+    def escrowDo(self, tymth, tock=1.0, **kwa):
         """ Process escrows of group multisig identifiers waiting to be completed.
 
         Steps involve:
@@ -940,7 +941,8 @@ def sendCredential(hby, hab, reger, postman, creder, recp):
         postman.send(serder=source, attachment=atc)
 
     serder, prefixer, seqner, saider = reger.cloneCred(creder.said)
-    atc = bytearray(coring.Counter(coring.CtrDex.SealSourceTriples, count=1).qb64b)
+    atc = bytearray(core.Counter(core.Codens.SealSourceTriples,
+                                 count=1, gvrsn=kering.Vrsn_1_0).qb64b)
     atc.extend(prefixer.qb64b)
     atc.extend(seqner.qb64b)
     atc.extend(saider.qb64b)
@@ -994,7 +996,7 @@ def sendArtifacts(hby, reger, postman, creder, recp):
             postman.send(serder=serder, attachment=atc)
 
     for msg in reger.clonePreIter(pre=creder.said):
-        serder = serdering.SerderKERI(raw=msg) # coring.Serder(raw=msg)
+        serder = serdering.SerderKERI(raw=msg)
         atc = msg[serder.size:]
         postman.send(serder=serder, attachment=atc)
 
@@ -1008,16 +1010,16 @@ def sendRegistry(hby, reger, postman, creder, sender, recp):
 
     ikever = hby.db.kevers[issr]
     for msg in hby.db.cloneDelegation(ikever):
-        serder = serdering.SerderKERI(raw=msg) # coring.Serder(raw=msg)
+        serder = serdering.SerderKERI(raw=msg)
         atc = msg[serder.size:]
         postman.send(serder=serder, attachment=atc)
 
     for msg in hby.db.clonePreIter(pre=issr):
-        serder = serdering.SerderKERI(raw=msg) # coring.Serder(raw=msg)
+        serder = serdering.SerderKERI(raw=msg)
         atc = msg[serder.size:]
         postman.send(serder=serder, attachment=atc)
 
     for msg in reger.clonePreIter(pre=regk):
-        serder = serdering.SerderKERI(raw=msg) # coring.Serder(raw=msg)
+        serder = serdering.SerderKERI(raw=msg)
         atc = msg[serder.size:]
         postman.send(serder=serder, attachment=atc)

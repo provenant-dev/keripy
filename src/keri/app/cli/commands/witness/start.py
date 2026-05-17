@@ -36,7 +36,7 @@ parser.add_argument('-n', '--name',
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--config-dir", "-c", dest="configDir", help="directory override for configuration data")
 parser.add_argument('--config-file',
@@ -55,7 +55,7 @@ parser.add_argument("--logfile", action="store", required=False, default=None,
 
 def launch(args):
     help.ogler.level = logging.getLevelName(args.loglevel)
-    if(args.logfile != None):
+    if args.logfile is not None:
         help.ogler.headDirPath = args.logfile
         help.ogler.reopen(name=args.name, temp=False, clear=True)
     logger = help.ogler.getLogger()
@@ -91,10 +91,13 @@ def runWitness(name="witness", base="", alias="witness", bran="", tcp=5631, http
                         reopen=True)
 
     aeid = ks.gbls.get('aeid')
+    ks.close()
 
     cf = None
     if configFile is not None:
         cf = configing.Configer(name=configFile, headDirPath=configDir, temp=False, reopen=True, clear=False)
+    
+    aids  = cf.get("aids", default=None) if cf is not None else None
 
     if aeid is None:
         hby = habbing.Habery(name=name, base=base, bran=bran, cf=cf)
@@ -106,6 +109,7 @@ def runWitness(name="witness", base="", alias="witness", bran="", tcp=5631, http
 
     doers.extend(indirecting.setupWitness(alias=alias,
                                           hby=hby,
+                                          aids=aids,
                                           tcpPort=tcp,
                                           httpPort=http,
                                           keypath=keypath,

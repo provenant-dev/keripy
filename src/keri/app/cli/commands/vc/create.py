@@ -6,9 +6,11 @@ from keri import help
 from hio.base import doing
 
 from keri import kering
+from keri import core
+from keri.core import coring, eventing, serdering
+
 from keri.app import indirecting, habbing, grouping, connecting, forwarding, signing, notifying
 from keri.app.cli.common import existing
-from keri.core import coring, eventing, serdering
 from keri.help import helping
 from keri.peer import exchanging
 from keri.vdr import credentialing, verifying
@@ -37,9 +39,11 @@ parser.add_argument('--base', '-b', help='additional optional prefix to file loc
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
 parser.add_argument("--private", help="flag to indicate if this credential needs privacy preserving features",
                     action="store_true")
-parser.add_argument("--private-credential-nonce", help="(str) nonce for vc", action="store")
-parser.add_argument("--private-subject-nonce", help="(str) nonce for subject", action="store")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument("--private-credential-nonce", help="nonce for vc",
+                    action="store")
+parser.add_argument("--private-subject-nonce", help="nonce for subject",
+                    action="store")
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--time", help="timestamp for the credential creation", required=False, default=None)
 
@@ -199,7 +203,7 @@ class CredentialIssuer(doing.DoDoer):
         doers.extend([doing.doify(self.createDo)])
         super(CredentialIssuer, self).__init__(doers=doers)
 
-    def createDo(self, tymth, tock=0.0):
+    def createDo(self, tymth, tock=0.0, **kwa):
         """  Issue Credential doer method
 
 
@@ -218,9 +222,9 @@ class CredentialIssuer(doing.DoDoer):
         dt = self.creder.attrib["dt"] if "dt" in self.creder.attrib else helping.nowIso8601()
         iserder = registry.issue(said=self.creder.said, dt=dt)
 
-        vcid = iserder.ked["i"]
-        rseq = coring.Seqner(snh=iserder.ked["s"])
-        rseal = eventing.SealEvent(vcid, rseq.snh, iserder.said)
+        #vcid = iserder.ked["i"]
+        #rseq = coring.Seqner(snh=iserder.ked["s"])
+        rseal = eventing.SealEvent(iserder.pre, iserder.snh, iserder.said)
         rseal = dict(i=rseal.i, s=rseal.s, d=rseal.d)
 
         if registry.estOnly:
@@ -229,11 +233,12 @@ class CredentialIssuer(doing.DoDoer):
         else:
             anc = hab.interact(data=[rseal])
 
-        aserder = serdering.SerderKERI(raw=anc)  # coring.Serder(raw=anc)
+        aserder = serdering.SerderKERI(raw=anc)
         self.credentialer.issue(self.creder, iserder)
         self.registrar.issue(self.creder, iserder, aserder)
 
-        acdc = signing.serialize(self.creder, coring.Prefixer(qb64=iserder.pre), coring.Seqner(sn=iserder.sn),
+        acdc = signing.serialize(self.creder, coring.Prefixer(qb64=iserder.pre),
+                                 core.Number(num=iserder.sn, code=core.NumDex.Huge),
                                  coring.Saider(qb64=iserder.said))
 
         if isinstance(self.hab, habbing.GroupHab):

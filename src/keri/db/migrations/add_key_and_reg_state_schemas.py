@@ -21,9 +21,8 @@ def _check_if_needed(db):
     return True
 
 def migrate(db):
-    """Adds schema for KeyStateRecord   , RegStateRecord, and migrates the rgy.cancs., hby.db.pubs.,
+    """Adds schema for KeyStateRecord, RegStateRecord, and migrates the rgy.cancs., hby.db.pubs.,
     and hby.db.digs. to be up to date as of 2022-??-??
-
     This migration performs the following:
     - hby.db -> "stts."  schema from dict -> KeyStateRecord
     -    rgy -> "stts."  schema from dict -> RegStateRecord
@@ -35,14 +34,13 @@ def migrate(db):
            "pubs." Verfer of each Verfer for each FEL event
            "digs." Diger of next Diger (ndiger) of each FEL event
         Value: (prefix, sn) of each event
-
     Parameters:
         db(Baser): Baser database object on which to run the migration
     """
     # May be running on a database that is already in the right state yet has no migrations run
     # so we need to check if the migration is needed
     if not _check_if_needed(db):
-        print(f"{__name__} migration not needed, already ran")
+        print(f"{__name__} migration not needed, database already in correct state")
         return
 
     try:
@@ -96,6 +94,7 @@ def migrate(db):
                 b=sad['b'],  # list of qb64 may be empty
                 c=sad['c'],
             )
+            # ksr = stateFromKever(kever)
             rgy.states.pin(sad['i'], val=rsr)
 
         for (said,), _ in rgy.saved.getItemIter():
@@ -117,9 +116,7 @@ def migrate(db):
         db.gpse.trim()
         db.epse.trim()
         db.dune.trim()
-        for ekey, edig in db.getQnfItemsNextIter():
-            pre, _ = splitKey(ekey)
-            db.delQnf(dgKey(pre, edig), edig)
+        db.qnfs.trim()
 
     except ConfigurationError:
         logger.error(f"identifier prefix for {db.name} does not exist, incept must be run first", )
@@ -135,7 +132,7 @@ def migrateKeys(db):
     digs = subing.CatCesrIoSetSuber(db=db, subkey="digs.",
                                     klas=(coring.Prefixer, coring.Seqner))
 
-    for pre, fn, dig in db.getFelItemAllPreIter(key=b''):
+    for pre, fn, dig in db.getFelItemAllPreIter():
         dgkey = dbing.dgKey(pre, dig)  # get message
         if not (raw := db.getEvt(key=dgkey)):
             logger.info(f"Migrate keys: missing event for dig={dig}, skipped.")

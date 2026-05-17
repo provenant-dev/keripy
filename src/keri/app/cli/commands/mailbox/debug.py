@@ -23,7 +23,7 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', default=None)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--witness', '-w', help='The qualified b64 AID of the witness to poll', required=True)
 parser.add_argument("--verbose", "-V", help="print JSON of all current events", action="store_true")
@@ -67,7 +67,7 @@ class ReadDoer(doing.DoDoer):
 
         super(ReadDoer, self).__init__(doers=doers)
 
-    def readDo(self, tymth, tock=0.0):
+    def readDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of
@@ -83,7 +83,7 @@ class ReadDoer(doing.DoDoer):
 
         hab = self.hby.habByName(name=self.alias)
         topics = {"/receipt": 0, "/replay": 0, "/multisig": 0, "/credential": 0, "/delegate": 0, "/challenge": 0,
-                  "/oobi": 0}
+                  "/oobi": 0, "/reply": 0}
         try:
             client, clientDoer = agenting.httpClient(hab, self.witness)
         except kering.MissingEntryError as e:
@@ -93,8 +93,11 @@ class ReadDoer(doing.DoDoer):
 
         print("Local Index per Topic")
         witrec = hab.db.tops.get((hab.pre, self.witness))
-        for topic in witrec.topics:
-            print(f"   Topic {topic}:   {witrec.topics[topic]}")
+        if witrec:
+            for topic in witrec.topics:
+                print(f"   Topic {topic}:   {witrec.topics[topic]}")
+        else:
+            print("\tNo local index")
         print()
 
         q = dict(pre=hab.pre, topics=topics)
@@ -105,7 +108,7 @@ class ReadDoer(doing.DoDoer):
 
         httping.createCESRRequest(msg, client, dest=self.witness)
 
-        while client.requests:
+        while client.requests or (not client.events and not client.requests):
             yield self.tock
 
         yield 1.0

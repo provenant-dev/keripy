@@ -25,7 +25,7 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 def request(args):
@@ -62,7 +62,7 @@ class RequestDoer(doing.DoDoer):
 
         super(RequestDoer, self).__init__(doers=doers)
 
-    def requestDo(self, tymth, tock=0.0):
+    def requestDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of
@@ -86,7 +86,7 @@ class RequestDoer(doing.DoDoer):
 
         (seqner, saider) = esc[0]
         evt = hab.makeOwnEvent(sn=seqner.sn)
-        delpre = hab.kever.delegator  # get the delegator identifier
+        delpre = hab.kever.delpre  # get the delegator identifier
 
         if isinstance(hab, GroupHab):
             phab = hab.mhab
@@ -96,10 +96,10 @@ class RequestDoer(doing.DoDoer):
         exn, atc = delegating.delegateRequestExn(hab.mhab, delpre=delpre, evt=bytes(evt), aids=hab.smids)
 
         # delegate AID ICP and exn of delegation request EXN
-        srdr = serdering.SerderKERI(raw=evt) # coring.Serder(raw=evt)
+        srdr = serdering.SerderKERI(raw=evt)
         del evt[:srdr.size]
         self.postman.send(src=phab.pre, dest=delpre, topic="delegate", serder=srdr, attachment=evt)
-        self.postman.send(src=phab.pre, dest=hab.kever.delegator, topic="delegate", serder=exn, attachment=atc)
+        self.postman.send(src=phab.pre, dest=hab.kever.delpre, topic="delegate", serder=exn, attachment=atc)
 
         while True:
             while self.postman.cues:

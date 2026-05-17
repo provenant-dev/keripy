@@ -12,6 +12,7 @@ from keri.app.cli.common import existing
 
 logger = help.ogler.getLogger()
 
+
 def handler(args):
     """
     Launch KERI database initialization

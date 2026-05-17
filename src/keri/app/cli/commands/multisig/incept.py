@@ -28,7 +28,7 @@ parser.add_argument('--name', '-n', help='Human readable environment reference f
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the local identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--wait", "-w", help="number of seconds to wait for other multisig events, defaults to 10",
                     default=10)
@@ -105,7 +105,7 @@ class GroupMultisigIncept(doing.DoDoer):
 
         super(GroupMultisigIncept, self).__init__(doers=doers)
 
-    def inceptDo(self, tymth, tock=0.0):
+    def inceptDo(self, tymth, tock=0.0, **kwa):
         """ Create or participate in an inception event for a distributed multisig identifier
 
         Parameters:
@@ -174,8 +174,8 @@ class GroupMultisigIncept(doing.DoDoer):
 
             yield self.tock
 
-        if ghab.kever.delegator:
-            yield from self.postman.sendEvent(hab=ghab, fn=ghab.kever.sn)
+        if ghab.kever.delpre:
+            yield from self.postman.sendEventToDelegator(hab=ghab, sender=ghab.mhab, fn=ghab.kever.sn)
 
         print()
         displaying.printIdentifier(self.hby, ghab.pre)

@@ -13,8 +13,10 @@ from keri import help
 from keri.app import habbing, indirecting, agenting, grouping, forwarding, delegating, notifying
 from keri.app.cli.common import existing
 from keri.app.habbing import GroupHab
+from keri import core
 from keri.core import coring, serdering
 from keri.db import dbing
+from keri.help import helping
 from keri.peer import exchanging
 
 logger = help.ogler.getLogger()
@@ -26,11 +28,16 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--interact", "-i", help="anchor the delegation approval in an interaction event.  "
                                              "Default is to use a rotation event.", action="store_true")
 parser.add_argument("--auto", "-Y", help="auto approve any delegation request non-interactively", action="store_true")
+parser.add_argument("--authenticate", '-z', help="Prompt the controller for authentication codes for each witness",
+                    action='store_true')
+parser.add_argument('--code', help='<Witness AID>:<code> formatted witness auth codes.  Can appear multiple times',
+                    default=[], action="append", required=False)
+parser.add_argument('--code-time', help='Time the witness codes were captured.', default=None, required=False)
 
 
 def confirm(args):
@@ -46,15 +53,20 @@ def confirm(args):
     alias = args.alias
     interact = args.interact
     auto = args.auto
+    authenticate = args.authenticate
+    codes = args.code
+    codeTime = args.code_time
 
-    confirmDoer = ConfirmDoer(name=name, base=base, alias=alias, bran=bran, interact=interact, auto=auto)
+    confirmDoer = ConfirmDoer(name=name, base=base, alias=alias, bran=bran, interact=interact, auto=auto,
+                              authenticate=authenticate, codes=codes, codeTime=codeTime)
 
     doers = [confirmDoer]
     return doers
 
 
 class ConfirmDoer(doing.DoDoer):
-    def __init__(self, name, base, alias, bran, interact=False, auto=False):
+    def __init__(self, name, base, alias, bran, interact=False, auto=False, authenticate=False, codes=None,
+                 codeTime=None):
         hby = existing.setupHby(name=name, base=base, bran=bran)
         self.hbyDoer = habbing.HaberyDoer(habery=hby)  # setup doer
         self.witq = agenting.WitnessInquisitor(hby=hby)
@@ -62,6 +74,9 @@ class ConfirmDoer(doing.DoDoer):
         self.counselor = grouping.Counselor(hby=hby)
         self.notifier = notifying.Notifier(hby=hby)
         self.mux = grouping.Multiplexor(hby=hby, notifier=self.notifier)
+        self.authenticate = authenticate
+        self.codes = codes if codes is not None else []
+        self.codeTime = codeTime
 
         exc = exchanging.Exchanger(hby=hby, handlers=[])
         delegating.loadHandlers(hby=hby, exc=exc, notifier=self.notifier)
@@ -79,7 +94,15 @@ class ConfirmDoer(doing.DoDoer):
         self.auto = auto
         super(ConfirmDoer, self).__init__(doers=doers)
 
-    def confirmDo(self, tymth, tock=0.0):
+    def _addAuthorizerSeal(self, pre, edig, anchorSn, anchorSaid):
+        """Save the authorizer (delegator) event seal of the anchoring IXN event for an approved delegation."""
+        dgkey = dbing.dgKey(pre, edig)
+        seqner = coring.Seqner(sn=anchorSn)
+        saider = coring.Saider(qb64=anchorSaid)
+        couple = seqner.qb64b + saider.qb64b
+        self.hby.db.setAes(dgkey, couple)
+
+    def confirmDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of
@@ -95,9 +118,8 @@ class ConfirmDoer(doing.DoDoer):
 
         while True:
             esc = self.escrowed()
-            for ekey, edig in esc:
-                pre, sn = dbing.splitKeySN(ekey)  # get pre and sn from escrow item
-                dgkey = dbing.dgKey(pre, bytes(edig))
+            for pre, sn, edig in esc:
+                dgkey = dbing.dgKey(pre, edig)
                 eraw = self.hby.db.getEvt(dgkey)
                 if eraw is None:
                     continue
@@ -111,7 +133,7 @@ class ConfirmDoer(doing.DoDoer):
                 elif ilk in (coring.Ilks.drt,):
                     typ = "rotation"
                     dkever = self.hby.kevers[eserder.pre]
-                    delpre = dkever.delegator
+                    delpre = dkever.delpre
 
                 else:
                     continue
@@ -130,8 +152,8 @@ class ConfirmDoer(doing.DoDoer):
 
                     if isinstance(hab, GroupHab):
                         aids = hab.smids
-                        seqner = coring.Seqner(sn=eserder.sn)
-                        anchor = dict(i=eserder.ked["i"], s=seqner.snh, d=eserder.said)
+
+                        anchor = dict(i=eserder.ked["i"], s=eserder.snh, d=eserder.said)
                         if self.interact:
                             msg = hab.interact(data=[anchor])
                         else:
@@ -148,12 +170,12 @@ class ConfirmDoer(doing.DoDoer):
                                               attachment=atc)
 
                         prefixer = coring.Prefixer(qb64=hab.pre)
-                        seqner = coring.Seqner(sn=serder.sn)
+                        sner = core.Number(num=serder.sn, code=core.NumDex.Huge)  # maybe serder.sner instead so not Huge
                         saider = coring.Saider(qb64b=serder.saidb)
-                        self.counselor.start(ghab=hab, prefixer=prefixer, seqner=seqner, saider=saider)
+                        self.counselor.start(ghab=hab, prefixer=prefixer, seqner=sner, saider=saider)
 
                         while True:
-                            saider = self.hby.db.cgms.get(keys=(prefixer.qb64, seqner.qb64))
+                            saider = self.hby.db.cgms.get(keys=(prefixer.qb64, sner.qb64))
                             if saider is not None:
                                 break
 
@@ -161,19 +183,36 @@ class ConfirmDoer(doing.DoDoer):
 
                         print(f"Delegate {eserder.pre} {typ} event committed.")
 
+                        self._addAuthorizerSeal(pre, edig, anchorSn=serder.sn,
+                                                anchorSaid=serder.said)
+                        self.hby.kvy.processEscrowDelegables()  # removes DIP/DRT from delegables after adding it to kevers
                         self.remove(self.toRemove)
                         return True
 
                     else:
                         cur = hab.kever.sner.num
-                        seqner = coring.Seqner(sn=eserder.sn)
-                        anchor = dict(i=eserder.ked["i"], s=seqner.snh, d=eserder.said)
+
+                        anchor = dict(i=eserder.ked["i"], s=eserder.snh, d=eserder.said)
                         if self.interact:
                             hab.interact(data=[anchor])
                         else:
                             hab.rotate(data=[anchor])
 
-                        witDoer = agenting.WitnessReceiptor(hby=self.hby)
+                        auths = {}
+                        if self.authenticate:
+                            codeTime = helping.fromIso8601(
+                                self.codeTime) if self.codeTime is not None else helping.nowIso8601()
+                            for arg in self.codes:
+                                (wit, code) = arg.split(":")
+                                auths[wit] = f"{code}#{codeTime}"
+
+                            for wit in hab.kever.wits:
+                                if wit in auths:
+                                    continue
+                                code = input(f"Entire code for {wit}: ")
+                                auths[wit] = f"{code}#{helping.nowIso8601()}"
+
+                        witDoer = agenting.WitnessReceiptor(hby=self.hby, auths=auths)
                         self.extend(doers=[witDoer])
                         self.toRemove.append(witDoer)
                         yield self.tock
@@ -203,6 +242,9 @@ class ConfirmDoer(doing.DoDoer):
 
                             print(f"Delegate {eserder.pre} {typ} event committed.")
 
+                        self._addAuthorizerSeal(pre, edig, anchorSn=hab.kever.sn,
+                                                anchorSaid=hab.kever.serder.said)
+                        self.hby.kvy.processEscrowDelegables()  # removes DIP/DRT from delegables after adding it to kevers
                         self.remove(self.toRemove)
                         return True
 
@@ -212,12 +254,6 @@ class ConfirmDoer(doing.DoDoer):
 
     def escrowed(self):
         esc = []
-        key = ekey = b''  # both start same. when not same means escrows found
-        while True:  # break when done
-            for ekey, edig in self.hby.db.getPseItemsNextIter(key=key):
-                esc.append((ekey, edig))
-            if ekey == key:  # still same so no escrows found on last while iteration
-                break
-            key = ekey  # setup next while iteration, with key after ekey
-
+        for (pre, sn), edig in self.hby.db.delegables.getItemIter():
+            esc.append((pre, sn, edig))
         return esc

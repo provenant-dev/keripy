@@ -7,9 +7,13 @@ import datetime
 import os
 
 from keri import help
-from keri.app import habbing
-from keri.core import coring, eventing, parsing, serdering
 from keri.help import helping
+
+from keri import core, kering
+from keri.core import coring, eventing, parsing, serdering, indexing, counting
+
+from keri.app import habbing
+
 
 logger = help.ogler.getLogger()
 
@@ -24,11 +28,12 @@ def test_replay():
     Deb replays Deb's events with both Cam's and  Bev's receipts to Cam
     Compare replay of Deb's events with receipts by both Deb and Cam to confirm identical
     """
-    artSalt = coring.Salter(raw=b'abcdef0123456789').qb64
+    artSalt = core.Salter(raw=b'abcdef0123456789').qb64
+    default_salt = core.Salter(raw=b'0123456789abcdef').qb64
 
-    with (habbing.openHby(name="deb", base="test") as debHby,
-         habbing.openHby(name="cam", base="test") as camHby,
-         habbing.openHby(name="bev", base="test") as bevHby,
+    with (habbing.openHby(name="deb", base="test", salt=default_salt) as debHby,
+         habbing.openHby(name="cam", base="test", salt=default_salt) as camHby,
+         habbing.openHby(name="bev", base="test", salt=default_salt) as bevHby,
          habbing.openHby(name="art", base="test", salt=artSalt) as artHby):
 
         # setup Deb's habitat using default salt multisig already incepts
@@ -130,6 +135,12 @@ def test_replay():
             b'OOJVAAAjEg-3N4cNT_yot5wWlcKaz-1xPAgteGCsYZhq9dax3sQPD5HFI7M13Bhp'
             b'kRttBEq92pAaIG')
 
+        assert debHab.kever.sn == 6
+        msgs = next(debHab.db.clonePreIter(debHab.pre, fn=4))
+        serder = serdering.SerderKERI(raw=msgs)
+        assert serder.ilk == kering.Ilks.ixn
+        assert serder.sn == 4
+
         # Play debMsgs to Cam
         # create non-local kevery for Cam to process msgs from Deb
         camKevery = eventing.Kevery(db=camHab.db,
@@ -227,6 +238,7 @@ def test_replay():
 
         # get disjoints receipts (vrcs) from Deb of Cam's events by processing Deb's cues
         debCamVrcs = debHab.processCues(debKevery.cues)
+        assert len(debKevery.cues) == 0
         assert debCamVrcs == (b'{"v":"KERI10JSON000091_","t":"rct","d":"EBp-SQb9fTgeoQkIkOd2xegv'
                         b'Xy3epjOskiPrf6JDIEuj","i":"EBp-SQb9fTgeoQkIkOd2xegvXy3epjOskiPrf'
                         b'6JDIEuj","s":"0"}-FABELfp9ZhqQCGov3wPRLa6vn5VkIQjug2sb2QD17T-TIp'
@@ -254,6 +266,7 @@ def test_replay():
 
         # get disjoints receipts (rcts) from Bev of Deb's events by processing Bevs's cues
         bevMsgs = bevHab.processCues(bevKevery.cues)
+        assert len(bevKevery.cues) == 0
         assert bevMsgs == (b'{"v":"KERI10JSON0000fd_","t":"icp","d":"EBXqe7Xzsw2aolT09Ouh5Zw9'
                         b'kNn2sgoHmo4zCn7Q7ZSC","i":"BAqph4mAWcf7mkIgk1Xrpvr7dWT7YvHIam_hq'
                         b'UAT2rqw","s":"0","kt":"1","k":["BAqph4mAWcf7mkIgk1Xrpvr7dWT7YvHI'
@@ -301,6 +314,7 @@ def test_replay():
 
         # get disjoints receipts (vrcs) from Deb of Bev's events by processing Deb's cues
         debBevVrcs = debHab.processCues(debKevery.cues)
+        assert len(debKevery.cues) == 0
         assert debBevVrcs == (b'{"v":"KERI10JSON000091_","t":"rct","d":"EBXqe7Xzsw2aolT09Ouh5Zw9'
                         b'kNn2sgoHmo4zCn7Q7ZSC","i":"BAqph4mAWcf7mkIgk1Xrpvr7dWT7YvHIam_hq'
                         b'UAT2rqw","s":"0"}-FABELfp9ZhqQCGov3wPRLa6vn5VkIQjug2sb2QD17T-TIp'
@@ -335,25 +349,25 @@ def test_replay():
         del msg[:len(serder.raw)]
         assert len(msg) == 1076
 
-        counter = coring.Counter(qb64b=msg)  # attachment length quadlets counter
-        assert counter.code == coring.CtrDex.AttachedMaterialQuadlets
+        counter = core.Counter(qb64b=msg, gvrsn=kering.Vrsn_1_0)  # attachment length quadlets counter
+        assert counter.code == counting.CtrDex_1_0.AttachmentGroup
         assert counter.count == (len(msg) - len(counter.qb64b)) // 4 == 268
         del msg[:len(counter.qb64b)]
         assert len(msg) == 1072 == 268 * 4
 
-        counter = coring.Counter(qb64b=msg)  # indexed signatures counter
-        assert counter.code == coring.CtrDex.ControllerIdxSigs
+        counter = core.Counter(qb64b=msg, gvrsn=kering.Vrsn_1_0)  # indexed signatures counter
+        assert counter.code == counting.CtrDex_1_0.ControllerIdxSigs
         assert counter.count == 3  # multisig deb
         del msg[:len(counter.qb64b)]
         assert len(msg) == 1068
 
         for i in range(counter.count):  # parse signatures
-            siger = coring.Siger(qb64b=msg)
+            siger = indexing.Siger(qb64b=msg)
             del msg[:len(siger.qb64b)]
         assert len(msg) == 1068 - 3 * len(siger.qb64b) == 804
 
-        counter = coring.Counter(qb64b=msg)  # trans receipt (vrc) counter
-        assert counter.code == coring.CtrDex.TransReceiptQuadruples
+        counter = core.Counter(qb64b=msg, gvrsn=kering.Vrsn_1_0)  # trans receipt (vrc) counter
+        assert counter.code == counting.CtrDex_1_0.TransReceiptQuadruples
         assert counter.count == 3  # multisig cam
         del msg[:len(counter.qb64b)]
         assert len(msg) == 800
@@ -363,8 +377,8 @@ def test_replay():
         assert len(msg) == 800 - 3 * (len(prefixer.qb64b) + len(seqner.qb64b) +
                                       len(diger.qb64b) + len(siger.qb64b)) == 200
 
-        counter = coring.Counter(qb64b=msg)  # nontrans receipt (rct) counter
-        assert counter.code == coring.CtrDex.NonTransReceiptCouples
+        counter = core.Counter(qb64b=msg, gvrsn=kering.Vrsn_1_0)  # nontrans receipt (rct) counter
+        assert counter.code == counting.CtrDex_1_0.NonTransReceiptCouples
         assert counter.count == 1  # single sig bev
         del msg[:len(counter.qb64b)]
         assert len(msg) == 196
@@ -373,8 +387,8 @@ def test_replay():
             prefixer, cigar = eventing.deReceiptCouple(msg, strip=True)
         assert len(msg) == 196 - 1 * (len(prefixer.qb64b) + len(cigar.qb64b)) == 64
 
-        counter = coring.Counter(qb64b=msg)  # first seen replay couple counter
-        assert counter.code == coring.CtrDex.FirstSeenReplayCouples
+        counter = core.Counter(qb64b=msg, gvrsn=kering.Vrsn_1_0)  # first seen replay couple counter
+        assert counter.code == counting.CtrDex_1_0.FirstSeenReplayCouples
         assert counter.count == 1
         del msg[:len(counter.qb64b)]
         assert len(msg) == 60
@@ -492,12 +506,12 @@ def test_replay_all():
     Replay all the events in database.
 
     """
-    artSalt = coring.Salter(raw=b'abcdef0123456789').qb64
+    artSalt = core.Salter(raw=b'abcdef0123456789').qb64
+    default_salt = core.Salter(raw=b'0123456789abcdef').qb64
 
-
-    with (habbing.openHby(name="deb", base="test") as debHby,
-         habbing.openHby(name="cam", base="test") as camHby,
-         habbing.openHby(name="bev", base="test") as bevHby,
+    with (habbing.openHby(name="deb", base="test", salt=default_salt) as debHby,
+         habbing.openHby(name="cam", base="test", salt=default_salt) as camHby,
+         habbing.openHby(name="bev", base="test", salt=default_salt) as bevHby,
          habbing.openHby(name="art", base="test", salt=artSalt) as artHby):
 
         # setup Deb's habitat using default salt multisig already incepts
@@ -547,6 +561,7 @@ def test_replay_all():
 
         # get disjoints receipts (vrcs) from Cam of Deb's events by processing Cam's cues
         camMsgs = camHab.processCues(camKevery.cues)
+        assert len(camKevery.cues) == 0
 
         # Play camMsgs to Deb
         # create non-local kevery for Deb to process msgs from Cam
@@ -561,6 +576,7 @@ def test_replay_all():
 
         # get disjoints receipts (vrcs) from Deb of Cam's events by processing Deb's cues
         debCamVrcs = debHab.processCues(debKevery.cues)
+        assert len(debKevery.cues) == 0
 
         # Play disjoints debCamVrcs to Cam
         parsing.Parser().parseOne(ims=bytearray(debCamVrcs), kvy=camKevery)
@@ -579,6 +595,7 @@ def test_replay_all():
 
         # get disjoints receipts (rcts) from Bev of Deb's events by processing Bevs's cues
         bevMsgs = bevHab.processCues(bevKevery.cues)
+        assert len(bevKevery.cues) == 0
 
         # Play bevMsgs to Deb
         parsing.Parser().parse(ims=bytearray(bevMsgs), kvy=debKevery)
@@ -589,6 +606,7 @@ def test_replay_all():
 
         # get disjoints receipts (vrcs) from Deb of Bev's events by processing Deb's cues
         debBevVrcs = debHab.processCues(debKevery.cues)
+        assert len(debKevery.cues) == 0
 
         # Play disjoints debBevVrcs to Bev
         parsing.Parser().parseOne(ims=bytearray(debBevVrcs), kvy=bevKevery)

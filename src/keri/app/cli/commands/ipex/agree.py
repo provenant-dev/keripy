@@ -7,7 +7,7 @@ import argparse
 
 from hio.base import doing
 
-from keri.core import coring
+from keri.core import signing
 
 parser = argparse.ArgumentParser(description='Reply to IPEX offer message acknowledged willingness to accept offered '
                                              'credential')
@@ -18,9 +18,9 @@ def handler(_):
     return [doing.doify(nonce)]
 
 
-def nonce(tymth, tock=0.0):
+def nonce(tymth, tock=0.0, **kwa):
     """ nonce
     """
     _ = (yield tock)
 
-    print(coring.randomNonce())
+    print(signing.Salter().qb64)

@@ -12,9 +12,12 @@ import os
 
 from hio.base import doing
 
-from keri.app import habbing, indirecting, configing
-from keri.core.coring import Salter
 from keri import help
+
+from keri.app import habbing, indirecting, configing
+
+from keri.core import Salter
+
 
 parser = argparse.ArgumentParser(description="Run a demo collection of witnesses")
 parser.add_argument("--loglevel", action="store", required=False, default=os.getenv("KERI_LOG_LEVEL", "CRITICAL"),
@@ -30,8 +33,7 @@ def demo(args):
     Run set of three witnesses for demo
 
     """
-    base_formatter = logging.Formatter(
-        '%(asctime)s [keri] %(module)s.%(funcName)s-%(lineno)s %(levelname)-8s %(message)s')
+    base_formatter = logging.Formatter('%(asctime)s [keri] %(module)s.%(funcName)s-%(lineno)s %(levelname)-8s %(message)s')
     base_formatter.default_msec_format = None
     help.ogler.baseConsoleHandler.setFormatter(base_formatter)
     help.ogler.level = logging.getLevelName(args.loglevel.upper())
@@ -66,10 +68,10 @@ class InitDoer(doing.DoDoer):
         self.wit = wit
         self.wub = wub
         self.wyz = wyz
-        
+
         super(InitDoer, self).__init__(doers=[doing.doify(self.initialize)])
 
-    def initialize(self, tymth, tock=0.0):
+    def initialize(self, tymth, tock=0.0, **kwa):
         # enter context
         self.wind(tymth)
         self.tock = tock

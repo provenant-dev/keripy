@@ -4,35 +4,39 @@ tests.vc.protocoling module
 
 """
 
-from keri.app import habbing, notifying
+from keri import core, kering
 from keri.core import coring, scheming, parsing
 from keri.core.eventing import SealEvent
+
 from keri.peer import exchanging
 from keri.vc import protocoling
 from keri.vc.proving import credential
 from keri.vdr import credentialing, verifying
+from keri.app import habbing, notifying
 
 
 def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingNowUTC):
     """ Test IPEX exchange protocol """
 
-    sidSalt = coring.Salter(raw=b'0123456789abcdef').qb64
-    assert sidSalt == '0AAwMTIzNDU2Nzg5YWJjZGVm'
-    wanSalt = coring.Salter(raw=b'wann-the-witness').qb64
-    assert wanSalt == '0AB3YW5uLXRoZS13aXRuZXNz'
+    sidSalt = core.Salter(raw=b'0123456789abcdef').qb64
+    assert sidSalt == '0AAUiJMii_rPXXCiLTEEaDT7'
+    wanSalt = core.Salter(raw=b'wann-the-witness').qb64
+    assert wanSalt == '0AAUiJMii_rPXXCiLTEEaDT7'
 
-    with (habbing.openHby(name="red", base="test") as redHby,
+    default_salt = core.Salter(raw=b'0123456789abcdef').qb64
+
+    with (habbing.openHby(name="red", base="test", salt=default_salt) as redHby,
           habbing.openHby(name="sid", base="test", salt=sidSalt) as sidHby):
         seeder.seedSchema(redHby.db)
         seeder.seedSchema(sidHby.db)
 
         sidHab = sidHby.makeHab(name="test")
         sidPre = sidHab.pre
-        assert sidPre == "EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3"
+        assert sidPre == "EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl"
 
         redHab = redHby.makeHab(name="test")
         redPre = redHab.pre
-        assert redPre == "EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3"
+        assert redPre == "EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl"
 
         sidRgy = credentialing.Regery(hby=sidHby, name="bob", temp=True)
         sidVer = verifying.Verifier(hby=sidHby, reger=sidRgy.reger)
@@ -67,12 +71,12 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
                             data=d,
                             status=issuer.regk)
 
-        assert creder.said == "EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG"
+        assert creder.said == "EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH"
 
         iss = issuer.issue(said=creder.said)
-        assert iss.raw == (b'{"v":"KERI10JSON0000ed_","t":"iss","d":"EK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9afq'
-                           b'dCIZjMy3","i":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG","s":"0","ri":"E'
-                           b'O0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4","dt":"2021-06-27T21:26:21.23325'
+        assert iss.raw == (b'{"v":"KERI10JSON0000ed_","t":"iss","d":"ECUw7AdWEE3fvr7dgbFDXj0CEZuJTTa_H8-i'
+                           b'LLAmIUPO","i":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","s":"0","ri":"E'
+                           b'B-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ","dt":"2021-06-27T21:26:21.23325'
                            b'7+00:00"}')
         rseal = SealEvent(iss.pre, "0", iss.said)._asdict()
         sidHab.interact(data=[rseal])
@@ -84,27 +88,28 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
         sidRgy.processEscrows()
 
         msg = creder.raw
-        assert msg == (b'{"v":"ACDC10JSON000197_","d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG",'
-                       b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","ri":"EO0_SyqPS1-EVYSITak'
-                       b'YpUHaUZZpZGsjaXFOaO_kCfS4","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC'
-                       b'","a":{"d":"EF2__B6DiLQHpdJZ_C0bddxy2o6nXIHEwchO9yylr3xx","dt":"2021-06-27T2'
-                       b'1:26:21.233257+00:00","i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LE'
+        assert msg == (b'{"v":"ACDC10JSON000197_","d":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH",'
+                       b'"i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","ri":"EB-u4VAF7A7_GR8PXJo'
+                       b'AVHv5X9vjtXew8Yo6Z3w9mQUQ","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC'
+                       b'","a":{"d":"EO9_6NattzsFiO8Fw1cxjYmDjOsKKSbootn-wXn9S3iB","dt":"2021-06-27T2'
+                       b'1:26:21.233257+00:00","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","LE'
                        b'I":"254900OPPU84GM83MG36"}}')
+
         atc = bytearray(msg)
-        atc.extend(coring.Counter(coring.CtrDex.SealSourceTriples, count=1).qb64b)
+        atc.extend(core.Counter(core.Codens.SealSourceTriples, count=1, gvrsn=kering.Vrsn_1_0).qb64b)
         atc.extend(coring.Prefixer(qb64=iss.pre).qb64b)
         atc.extend(coring.Seqner(sn=0).qb64b)
         atc.extend(iss.saidb)
 
-        assert atc == (b'{"v":"ACDC10JSON000197_","d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qw'
-                       b'vHdlvgfOyG","i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","'
-                       b'ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4","s":"EMQWEcCn'
-                       b'VRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a":{"d":"EF2__B6DiLQHpdJZ'
-                       b'_C0bddxy2o6nXIHEwchO9yylr3xx","dt":"2021-06-27T21:26:21.233257+0'
-                       b'0:00","i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LEI":"'
-                       b'254900OPPU84GM83MG36"}}-IABEDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHd'
-                       b'lvgfOyG0AAAAAAAAAAAAAAAAAAAAAAAEK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9'
-                       b'afqdCIZjMy3')
+        assert atc == (b'{"v":"ACDC10JSON000197_","d":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103'
+                       b'V3-4E-ClXH","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","'
+                       b'ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ","s":"EMQWEcCn'
+                       b'VRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a":{"d":"EO9_6NattzsFiO8F'
+                       b'w1cxjYmDjOsKKSbootn-wXn9S3iB","dt":"2021-06-27T21:26:21.233257+0'
+                       b'0:00","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","LEI":"'
+                       b'254900OPPU84GM83MG36"}}-IABEElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-'
+                       b'4E-ClXH0AAAAAAAAAAAAAAAAAAAAAAAECUw7AdWEE3fvr7dgbFDXj0CEZuJTTa_H'
+                       b'8-iLLAmIUPO')
         parsing.Parser().parseOne(ims=bytes(atc), vry=sidVer)
 
         # Successfully parsed credential is now saved in database.
@@ -115,29 +120,26 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
         apply0, apply0atc = protocoling.ipexApplyExn(sidHab, message="Please give me a credential", schema=schema,
                                                      recp=redPre, attrs={})
 
-        assert apply0.raw == (b'{"v":"KERI10JSON000175_","t":"exn","d":"EK9Q7n1y-Rlf-A7-T0uWSKuOlHZHBy_4zVaNp60GxXEr",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"","p":"",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/apply","q":{},"a":{"m":"Please '
-                              b'give me a credential","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a":{},'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3"},"e":{}}')
+        assert apply0.raw == (b'{"v":"KERI10JSON000175_","t":"exn","d":"EHVK5cO32UQJCkpK9RqRP_ONViK8u3JNXn73'
+                              b'nJ8hdmXr","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"",'
+                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/apply","q":{},"a":{"m":"P'
+                              b'lease give me a credential","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1k'
+                              b'C","a":{},"i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl"},"e":{}}')
 
         # No requirements for apply, except that its first, no `p`
         assert ipexhan.verify(serder=apply0) is True
 
         offer0, offer0atc = protocoling.ipexOfferExn(sidHab, "How about this", acdc=creder.raw, apply=apply0)
-        assert offer0.raw == (b'{"v":"KERI10JSON0002f8_","t":"exn","d":"ED-uXbt7hRH3cmQY9vtwmcPOGvdmPEq_bnQ4sgQK9KhB",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                              b'"p":"EK9Q7n1y-Rlf-A7-T0uWSKuOlHZHBy_4zVaNp60GxXEr",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/offer","q":{},"a":{"m":"How about '
-                              b'this"},"e":{"acdc":{"v":"ACDC10JSON000197_",'
-                              b'"d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC",'
-                              b'"a":{"d":"EF2__B6DiLQHpdJZ_C0bddxy2o6nXIHEwchO9yylr3xx",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LEI":"254900OPPU84GM83MG36"}},'
-                              b'"d":"EOVRKHUAEjvfyWzQ8IL4icBiaVuy_CSTse_W_AssaAeE"}}')
+        assert offer0.raw == (b'{"v":"KERI10JSON0002f8_","t":"exn","d":"ENdVOCsP5Xz57qs1xa_msznozvBs6Ii0_JRo'
+                              b'i6tp2NBu","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EH'
+                              b'VK5cO32UQJCkpK9RqRP_ONViK8u3JNXn73nJ8hdmXr","dt":"2021-06-27T21:26:21.233257'
+                              b'+00:00","r":"/ipex/offer","q":{},"a":{"m":"How about this"},"e":{"acdc":{"v"'
+                              b':"ACDC10JSON000197_","d":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","i":'
+                              b'"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","ri":"EB-u4VAF7A7_GR8PXJoAVHv'
+                              b'5X9vjtXew8Yo6Z3w9mQUQ","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a'
+                              b'":{"d":"EO9_6NattzsFiO8Fw1cxjYmDjOsKKSbootn-wXn9S3iB","dt":"2021-06-27T21:26'
+                              b':21.233257+00:00","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","LEI":"'
+                              b'254900OPPU84GM83MG36"}},"d":"EOG-KWyllXlb2HVIuewN1YJAOT304PaSczyt3V5Z878S"}}')
 
         # This should fail because it is not first and the apply isn't persisted yet
         assert ipexhan.verify(serder=offer0) is False
@@ -164,29 +166,26 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
 
         # Let's see if we can spurn a message we previously accepted.
         spurn0, spurn0atc = protocoling.ipexSpurnExn(sidHab, "I reject you", spurned=apply0)
-        assert spurn0.raw == (b'{"v":"KERI10JSON000125_","t":"exn","d":"EP9mGfCLrVs-A2KiSwruQ8bdQVlPIiIFZ2t4f6Dj4gnc",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                              b'"p":"EK9Q7n1y-Rlf-A7-T0uWSKuOlHZHBy_4zVaNp60GxXEr",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/spurn","q":{},"a":{"m":"I reject '
-                              b'you"},"e":{}}')
+        assert spurn0.raw == (b'{"v":"KERI10JSON000125_","t":"exn","d":"EHijfrof83z7JeFR-wJO9Ptgl-PieQHhKC-F'
+                              b'bZIDvGvM","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EH'
+                              b'VK5cO32UQJCkpK9RqRP_ONViK8u3JNXn73nJ8hdmXr","dt":"2021-06-27T21:26:21.233257'
+                              b'+00:00","r":"/ipex/spurn","q":{},"a":{"m":"I reject you"},"e":{}}')
 
         # This will fail, we've already responded with an offer
         assert ipexhan.verify(spurn0) is False
 
         # Now lets try an offer without a pointer back to a reply
         offer1, offer1atc = protocoling.ipexOfferExn(sidHab, "Here a credential offer", acdc=creder.raw)
-        assert offer1.raw == (b'{"v":"KERI10JSON0002d5_","t":"exn","d":"EJC9_GH0TeYJ3_cyutkS1gZfcgaGUQnk3v7F_gwJShVM",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"","p":"",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/offer","q":{},"a":{"m":"Here a '
-                              b'credential offer"},"e":{"acdc":{"v":"ACDC10JSON000197_",'
-                              b'"d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC",'
-                              b'"a":{"d":"EF2__B6DiLQHpdJZ_C0bddxy2o6nXIHEwchO9yylr3xx",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LEI":"254900OPPU84GM83MG36"}},'
-                              b'"d":"EOVRKHUAEjvfyWzQ8IL4icBiaVuy_CSTse_W_AssaAeE"}}')
+        assert offer1.raw == (b'{"v":"KERI10JSON0002d5_","t":"exn","d":"EC8fiu3IoCex-7uhTskkEodJOiQYQpO61l3Y'
+                              b'HCXWuuFi","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"",'
+                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/offer","q":{},"a":{"m":"H'
+                              b'ere a credential offer"},"e":{"acdc":{"v":"ACDC10JSON000197_","d":"EElymNmgs'
+                              b'1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xy'
+                              b'a8AN-tiUbl","ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ","s":"EMQWEcC'
+                              b'nVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a":{"d":"EO9_6NattzsFiO8Fw1cxjYmDjOs'
+                              b'KKSbootn-wXn9S3iB","dt":"2021-06-27T21:26:21.233257+00:00","i":"EMl4RhuR_Jxp'
+                              b'iMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","LEI":"254900OPPU84GM83MG36"}},"d":"EOG-KW'
+                              b'yllXlb2HVIuewN1YJAOT304PaSczyt3V5Z878S"}}')
 
         # Will work because it is starting a new conversation
         assert ipexhan.verify(serder=offer1) is True
@@ -198,11 +197,11 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
         assert serder.ked == offer1.ked
 
         agree, argeeAtc = protocoling.ipexAgreeExn(sidHab, "I'll accept that offer", offer=offer0)
-        assert agree.raw == (b'{"v":"KERI10JSON00012f_","t":"exn","d":"ELLFpKUv8qt6UKaNFj2_s-3Hs1vFeRgWdq_LIQm2HEER",'
-                             b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                             b'"p":"ED-uXbt7hRH3cmQY9vtwmcPOGvdmPEq_bnQ4sgQK9KhB",'
-                             b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/agree","q":{},"a":{"m":"I\'ll '
-                             b'accept that offer"},"e":{}}')
+        assert agree.raw == (b'{"v":"KERI10JSON00012f_","t":"exn","d":"ECU3UjnSY1_6Wl3aYEW19jaGiKuyFh_chIQQ'
+                             b'w48bcT_X","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EN'
+                             b'dVOCsP5Xz57qs1xa_msznozvBs6Ii0_JRoi6tp2NBu","dt":"2021-06-27T21:26:21.233257'
+                             b'+00:00","r":"/ipex/agree","q":{},"a":{"m":"I\'ll accept that offer"},"e":'
+                             b'{}}')
 
         # Can not create an agree without an offer, so this will pass since it has an offer that has no response
         assert ipexhan.verify(serder=agree) is True
@@ -217,28 +216,24 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
         anc = sidHab.makeOwnEvent(sn=2)
         grant0, grant0atc = protocoling.ipexGrantExn(sidHab, message="Here's a credential", recp=sidHab.pre,
                                                      acdc=msg, iss=iss.raw, anc=anc)
-        assert grant0.raw == (b'{"v":"KERI10JSON000539_","t":"exn","d":"EBXaaGfKREvo3UbvNEtgTiZySHe71tTU4-ZmcFETVdn8",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"","p":"",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/grant","q":{},"a":{"m":"Here\'s a '
-                              b'credential","i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3"},"e":{"acdc":{'
-                              b'"v":"ACDC10JSON000197_","d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC",'
-                              b'"a":{"d":"EF2__B6DiLQHpdJZ_C0bddxy2o6nXIHEwchO9yylr3xx",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LEI":"254900OPPU84GM83MG36"}},'
-                              b'"iss":{"v":"KERI10JSON0000ed_","t":"iss",'
-                              b'"d":"EK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9afqdCIZjMy3",'
-                              b'"i":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG","s":"0",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00"},"anc":{"v":"KERI10JSON00013a_","t":"ixn",'
-                              b'"d":"EOjAxp-AMLzicGz2h-DxvMK9kicajpZEwdN8-8k54hvz",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","s":"2",'
-                              b'"p":"EGKglEgIpdHuhuwl-IiSDG9x094gMrRxVaXGgXvCzCYM",'
-                              b'"a":[{"i":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG","s":"0",'
-                              b'"d":"EK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9afqdCIZjMy3"}]},'
-                              b'"d":"EI5mZXZ84Su4DrEUOxtl-NaUURQtTJeAn12xf146beg3"}}')
+        assert grant0.raw == (b'{"v":"KERI10JSON000539_","t":"exn","d":"ELnjKvzdgO57JZwG3giIScoOeTB0rLuevniv'
+                              b'zRE5DbTE","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"",'
+                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/grant","q":{},"a":{"m":"H'
+                              b'ere\'s a credential","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl"},'
+                              b'"e":{"acdc":{"v":"ACDC10JSON000197_","d":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103'
+                              b'V3-4E-ClXH","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","ri":"EB-u4VA'
+                              b'F7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvaf'
+                              b'X3bHQ9Gkk1kC","a":{"d":"EO9_6NattzsFiO8Fw1cxjYmDjOsKKSbootn-wXn9S3iB","dt":"'
+                              b'2021-06-27T21:26:21.233257+00:00","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8A'
+                              b'N-tiUbl","LEI":"254900OPPU84GM83MG36"}},"iss":{"v":"KERI10JSON0000ed_","t":"'
+                              b'iss","d":"ECUw7AdWEE3fvr7dgbFDXj0CEZuJTTa_H8-iLLAmIUPO","i":"EElymNmgs1u0mSa'
+                              b'oCeOtSsNOROLuqOz103V3-4E-ClXH","s":"0","ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXe'
+                              b'w8Yo6Z3w9mQUQ","dt":"2021-06-27T21:26:21.233257+00:00"},"anc":{"v":"KERI10JS'
+                              b'ON00013a_","t":"ixn","d":"EGhSHKIV5-nkeirdkqzqsvmeF1FXw_yH8NvPSAY1Rgyd","i":'
+                              b'"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","s":"2","p":"ED1kkh5_ECYriK-j'
+                              b'2gSv6Zjr5way88XVhwRCxk5zoTRG","a":[{"i":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V'
+                              b'3-4E-ClXH","s":"0","d":"ECUw7AdWEE3fvr7dgbFDXj0CEZuJTTa_H8-iLLAmIUPO"}]},"d"'
+                              b':"EJ4-dlS9ktlb9HDWPYc0IJ2hS2NbvnCQBhUsFSkEPwIo"}}')
 
         assert ipexhan.verify(serder=grant0) is True
 
@@ -251,11 +246,10 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
 
         # Let's see if we can spurn a message we previously accepted.
         spurn1, spurn1atc = protocoling.ipexSpurnExn(sidHab, "I reject you", spurned=grant0)
-        assert spurn1.raw == (b'{"v":"KERI10JSON000125_","t":"exn","d":"EIoMDwEvyR4j43W5Hh9CyJ4ttwNHlrmABwyUvKHhF9mp",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                              b'"p":"EBXaaGfKREvo3UbvNEtgTiZySHe71tTU4-ZmcFETVdn8",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/spurn","q":{},"a":{"m":"I reject '
-                              b'you"},"e":{}}')
+        assert spurn1.raw == (b'{"v":"KERI10JSON000125_","t":"exn","d":"ELHFilyCgYvVq6vczgPQc7ZuRMs7Cv10U_h-'
+                              b'2LIvJ1-Z","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EL'
+                              b'njKvzdgO57JZwG3giIScoOeTB0rLuevnivzRE5DbTE","dt":"2021-06-27T21:26:21.233257'
+                              b'+00:00","r":"/ipex/spurn","q":{},"a":{"m":"I reject you"},"e":{}}')
         smsg = bytearray(spurn1.raw)
         smsg.extend(spurn1atc)
         parsing.Parser().parse(ims=smsg, exc=sidExc)
@@ -265,29 +259,25 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
         # Now we'll run a grant pointing back to the agree all the way to the database
         grant1, grant1atc = protocoling.ipexGrantExn(sidHab, message="Here's a credential", acdc=msg, iss=iss.raw,
                                                      recp=sidHab.pre, anc=anc, agree=agree)
-        assert grant1.raw == (b'{"v":"KERI10JSON000565_","t":"exn","d":"ENy1ktZHowD73mn0vJL-xpTzCDpa4RuISZldAZImiKD_",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                              b'"p":"ELLFpKUv8qt6UKaNFj2_s-3Hs1vFeRgWdq_LIQm2HEER",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/grant","q":{},"a":{"m":"Here\'s a '
-                              b'credential","i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3"},"e":{"acdc":{'
-                              b'"v":"ACDC10JSON000197_","d":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC",'
-                              b'"a":{"d":"EF2__B6DiLQHpdJZ_C0bddxy2o6nXIHEwchO9yylr3xx",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","LEI":"254900OPPU84GM83MG36"}},'
-                              b'"iss":{"v":"KERI10JSON0000ed_","t":"iss",'
-                              b'"d":"EK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9afqdCIZjMy3",'
-                              b'"i":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG","s":"0",'
-                              b'"ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00"},"anc":{"v":"KERI10JSON00013a_","t":"ixn",'
-                              b'"d":"EOjAxp-AMLzicGz2h-DxvMK9kicajpZEwdN8-8k54hvz",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","s":"2",'
-                              b'"p":"EGKglEgIpdHuhuwl-IiSDG9x094gMrRxVaXGgXvCzCYM",'
-                              b'"a":[{"i":"EDkftEwWBpohjTpemh_6xkaGNuoDsRU3qwvHdlvgfOyG","s":"0",'
-                              b'"d":"EK2WxcpF3oL1yqS3Z8i08WDYkHDcYhJL9afqdCIZjMy3"}]},'
-                              b'"d":"EI5mZXZ84Su4DrEUOxtl-NaUURQtTJeAn12xf146beg3"}}')
+        assert grant1.raw == (b'{"v":"KERI10JSON000565_","t":"exn","d":"EHAY_L6Ig4k_5qIw6uH-QZwBswWLfwVzCqaG'
+                              b'sjtdnubK","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EC'
+                              b'U3UjnSY1_6Wl3aYEW19jaGiKuyFh_chIQQw48bcT_X","dt":"2021-06-27T21:26:21.233257'
+                              b'+00:00","r":"/ipex/grant","q":{},"a":{"m":"Here\'s a credential","i":"EMl'
+                              b'4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl"},"e":{"acdc":{"v":"ACDC10JSON0001'
+                              b'97_","d":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","i":"EMl4RhuR_JxpiMd'
+                              b'1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w'
+                              b'9mQUQ","s":"EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC","a":{"d":"EO9_6Nat'
+                              b'tzsFiO8Fw1cxjYmDjOsKKSbootn-wXn9S3iB","dt":"2021-06-27T21:26:21.233257+00:00'
+                              b'","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","LEI":"254900OPPU84GM83'
+                              b'MG36"}},"iss":{"v":"KERI10JSON0000ed_","t":"iss","d":"ECUw7AdWEE3fvr7dgbFDXj'
+                              b'0CEZuJTTa_H8-iLLAmIUPO","i":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","'
+                              b's":"0","ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ","dt":"2021-06-27T'
+                              b'21:26:21.233257+00:00"},"anc":{"v":"KERI10JSON00013a_","t":"ixn","d":"EGhSHK'
+                              b'IV5-nkeirdkqzqsvmeF1FXw_yH8NvPSAY1Rgyd","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn'
+                              b'9Xya8AN-tiUbl","s":"2","p":"ED1kkh5_ECYriK-j2gSv6Zjr5way88XVhwRCxk5zoTRG","a'
+                              b'":[{"i":"EElymNmgs1u0mSaoCeOtSsNOROLuqOz103V3-4E-ClXH","s":"0","d":"ECUw7AdW'
+                              b'EE3fvr7dgbFDXj0CEZuJTTa_H8-iLLAmIUPO"}]},"d":"EJ4-dlS9ktlb9HDWPYc0IJ2hS2Nbvn'
+                              b'CQBhUsFSkEPwIo"}}')
         assert ipexhan.verify(serder=grant1) is True
 
         gmsg = bytearray(grant1.raw)
@@ -298,11 +288,11 @@ def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingN
 
         # And now the last... admit the granted credential to complete the full flow
         admit0, admit0atc = protocoling.ipexAdmitExn(sidHab, "Thanks for the credential", grant=grant1)
-        assert admit0.raw == (b'{"v":"KERI10JSON000132_","t":"exn","d":"EAnQEaL-jSGK22VSbPN7WAUWVcxJ9LV8S5fORVAqVQzN",'
-                              b'"i":"EIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3","rp":"",'
-                              b'"p":"ENy1ktZHowD73mn0vJL-xpTzCDpa4RuISZldAZImiKD_",'
-                              b'"dt":"2021-06-27T21:26:21.233257+00:00","r":"/ipex/admit","q":{},"a":{"m":"Thanks for '
-                              b'the credential"},"e":{}}')
+        assert admit0.raw == (b'{"v":"KERI10JSON000132_","t":"exn","d":"EMxU5rfeqKnZzrbqnL7weXQGaC8Zum4qowj2'
+                              b'eiL6GxqL","i":"EMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl","rp":"","p":"EH'
+                              b'AY_L6Ig4k_5qIw6uH-QZwBswWLfwVzCqaGsjtdnubK","dt":"2021-06-27T21:26:21.233257'
+                              b'+00:00","r":"/ipex/admit","q":{},"a":{"m":"Thanks for the credential"},"e":{'
+                              b'}}')
         assert ipexhan.verify(serder=admit0) is True
 
         amsg = bytearray(admit0.raw)

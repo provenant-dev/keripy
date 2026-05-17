@@ -17,17 +17,16 @@ from hio.help import decking
 from keri import kering
 from .. import core
 from .. import help
-from ..core import serdering, coring
-from ..core.coring import (MtrDex, Serials, versify, Prefixer,
-                           Ilks, Seqner, Verfer)
-from ..core.eventing import SealEvent, ample, TraitDex, verifySigs, validateSN
+from ..core import serdering, coring, indexing
+from ..core.coring import (MtrDex, Kinds, versify, Prefixer,
+                           Ilks, Seqner, Verfer, Number)
+from ..core.signing import (Salter,)
+from ..core.eventing import SealEvent, ample, TraitDex, verifySigs
 from ..db import basing, dbing
-from ..db.dbing import dgKey, snKey
+from ..db.dbing import dgKey, snKey, splitSnKey
 from ..help import helping
 from ..kering import (MissingWitnessSignatureError, Version,
                       MissingAnchorError, ValidationError, OutOfOrderError, LikelyDuplicitousError)
-from ..kering import (VCP_LABELS, VRT_LABELS, ISS_LABELS, BIS_LABELS, REV_LABELS,
-                      BRV_LABELS, TSN_LABELS, CRED_TSN_LABELS)
 from ..vdr import viring
 
 logger = help.ogler.getLogger()
@@ -40,7 +39,7 @@ def incept(
         nonce=None,
         cnfg=None,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
         code=MtrDex.Blake3_256,
 ):
     """ Returns serder of credential registry inception (vcp) message event
@@ -92,7 +91,7 @@ def incept(
         if toad != 0:  # invalid toad
             raise ValueError("Invalid toad = {} for baks = {}".format(toad, baks))
 
-    nonce = nonce if nonce is not None else coring.randomNonce()
+    nonce = nonce if nonce is not None else Salter().qb64
     ked = dict(v=vs,  # version string
                t=ilk,
                d="",
@@ -106,7 +105,6 @@ def incept(
                )
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -119,7 +117,7 @@ def rotate(
         cuts=None,
         adds=None,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
 ):
     """ Returns serder of registry rotation (brt) message event
 
@@ -207,7 +205,6 @@ def rotate(
                )
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -215,7 +212,7 @@ def issue(
         vcdig,
         regk,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
         dt=None
 ):
     """ Returns serder of issuance (iss) message event
@@ -248,7 +245,6 @@ def issue(
         ked["dt"] = dt
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -257,7 +253,7 @@ def revoke(
         regk,
         dig,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
         dt=None
 ):
     """ Returns serder of backerless credential revocation (rev) message event
@@ -298,7 +294,6 @@ def revoke(
     _, ked = coring.Saider.saidify(sad=ked)
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -308,7 +303,7 @@ def backerIssue(
         regsn,
         regd,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
         dt=None,
 ):
     """ Returns serder of backer issuance (bis) message event
@@ -351,7 +346,6 @@ def backerIssue(
         ked["dt"] = dt
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -362,7 +356,7 @@ def backerRevoke(
         regd,
         dig,
         version=Version,
-        kind=Serials.json,
+        kind=Kinds.json,
         dt=None
 ):
     """ Returns serder of backer credential revocation (brv) message event
@@ -406,7 +400,6 @@ def backerRevoke(
         ked["dt"] = dt
 
     serder = serdering.SerderKERI(sad=ked, makify=True)
-    serder._verify()  # raises error if fails verifications
     return serder
 
 
@@ -522,7 +515,7 @@ def vcstate(vcpre,
             ra=None,
             dts=None,  # default current datetime
             version=Version,
-            kind=Serials.json,
+            kind=Kinds.json,
             ):
     """ Returns the credential transaction state notification
 
@@ -592,7 +585,7 @@ def query(regk,
           dtb=None,
           stamp=None,
           version=Version,
-          kind=Serials.json
+          kind=Kinds.json
           ):
     """ Returns serder of credentialquery (qry) event message.
 
@@ -644,7 +637,7 @@ class Tever:
     Has the following public attributes and properties:
 
     Class Attributes:
-        .NoBackers is Boolean
+        .NoRegistrarBackers is Boolean
                 True means do not allow backers (default to witnesses of controlling KEL)
                 False means allow backers (ignore witnesses of controlling KEL)
 
@@ -666,7 +659,7 @@ class Tever:
         .noBackers is boolean trait True means do not allow backers
 
     """
-    NoBackers = False
+    NoRegistrarBackers = False
 
     def __init__(self, cues=None, rsr=None, serder=None, seqner=None, saider=None,
                  bigers=None, db=None, reger=None, noBackers=None, estOnly=None,
@@ -718,12 +711,6 @@ class Tever:
             raise ValidationError("Expected ilk {} got {} for evt: {}".format(Ilks.vcp, ilk, serder))
 
         self.ilk = ilk
-        labels = VCP_LABELS
-        for k in labels:
-            if k not in serder.ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, serder.ked))
-
         self.incept(serder=serder)
         self.config(serder=serder, noBackers=noBackers, estOnly=estOnly)
 
@@ -820,14 +807,14 @@ class Tever:
         """
 
         ked = serder.ked
-        self.pre = ked["ii"]
-        self.prefixer = Prefixer(qb64=serder.pre)
-        if not self.prefixer.verify(ked=ked, prefixed=True):  # invalid prefix
-            raise ValidationError("Invalid prefix = {} for registry inception evt = {}."
-                                  .format(self.prefixer.qb64, ked))
+        self.pre = ked["ii"]  # which is not the AID of the serder in ked["i"]
+        self.prefixer = Prefixer(qb64=serder.pre)  # this not related to self.pre
+        #if not self.prefixer.verify(ked=ked, prefixed=True):  # invalid prefix
+            #raise ValidationError("Invalid prefix = {} for registry inception evt = {}."
+                                  #.format(self.prefixer.qb64, ked))
 
-        sn = ked["s"]
-        self.sn = validateSN(sn, inceptive=True)
+
+        self.sn = Number(numh=ked["s"]).validate(inceptive=True).sn
 
         self.cuts = []  # always empty at inception since no prev event
         self.adds = []  # always empty at inception since no prev event
@@ -864,7 +851,7 @@ class Tever:
         """
         # assign traits
         self.noBackers = (True if (noBackers if noBackers is not None
-                                   else self.NoBackers)
+                                   else self.NoRegistrarBackers)
                           else False)  # ensure default noBackers is boolean
 
         self.estOnly = (True if (estOnly if estOnly is not None
@@ -895,12 +882,13 @@ class Tever:
 
         ked = serder.ked
         ilk = ked["t"]
-        sn = ked["s"]
+        #sn = ked["s"]
 
         icp = ilk in (Ilks.iss, Ilks.bis)
 
         # validate SN for
-        sn = validateSN(sn, inceptive=icp)
+        #sn = validateSN(sn, inceptive=icp)
+        sn = Number(numh=ked["s"]).validate(inceptive=icp).sn
 
         if ilk in (Ilks.vrt,):
             if self.noBackers is True:
@@ -961,8 +949,8 @@ class Tever:
         ilk = ked["t"]
         dig = ked["p"]
 
-        # XXXX should there be validation of labels here
-        labels = VRT_LABELS  # assumes ilk == Ilks.vrt
+
+        #labels = VRT_LABELS  # assumes ilk == Ilks.vrt
         #for k in labels:
             #if k not in ked:
                 #raise ValidationError("Missing element = {} from {} event for "
@@ -1051,12 +1039,11 @@ class Tever:
         ilk = ked["t"]
         vci = vcpre
 
-        labels = ISS_LABELS if ilk == Ilks.iss else BIS_LABELS
-
-        for k in labels:
-            if k not in ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, ked))
+        #labels = ISS_LABELS if ilk == Ilks.iss else BIS_LABELS
+        #for k in labels:
+            #if k not in ked:
+                #raise ValidationError("Missing element = {} from {} event for "
+                                      #"evt = {}.".format(k, ilk, ked))
 
         if ilk == Ilks.iss:  # simple issue
             if self.noBackers is False:
@@ -1118,12 +1105,11 @@ class Tever:
         vcpre = ked["i"]
         ilk = ked["t"]
 
-        labels = REV_LABELS if ilk == Ilks.rev else BRV_LABELS
-
-        for k in labels:
-            if k not in ked:
-                raise ValidationError("Missing element = {} from {} event for "
-                                      "evt = {}.".format(k, ilk, ked))
+        #labels = REV_LABELS if ilk == Ilks.rev else BRV_LABELS
+        #for k in labels:
+            #if k not in ked:
+                #raise ValidationError("Missing element = {} from {} event for "
+                                      #"evt = {}.".format(k, ilk, ked))
 
         # have to compare with VC issuance serder
         vci = vcpre
@@ -1186,7 +1172,7 @@ class Tever:
             status (Serder): transaction event state notification message
         """
         digs = []
-        for _, dig in self.reger.getTelItemPreIter(pre=vci.encode("utf-8")):
+        for _, _, dig in self.reger.getTelItemPreIter(pre=vci.encode("utf-8")):
             digs.append(dig)
 
         if len(digs) == 0:
@@ -1267,8 +1253,8 @@ class Tever:
         self.reger.tets.pin(keys=(pre.decode("utf-8"), dig.decode("utf-8")), val=coring.Dater())
         self.reger.putTvt(key, serder.raw)
         self.reger.putTel(snKey(pre, sn), dig)
-        logger.info("Tever: Added to TEL %s valid event=%s SAID=%s reg=%.8s... iss=%s",
-                    serder.ilk, serder.pre, serder.said, self.regk, self.pre)
+        logger.info("Tever: Added to TEL valid %s event %s said=%s reg=%.8s iss=%.8s",
+                    serder.ilk, pre.decode(), serder.said, self.regk, self.pre)
         logger.debug("TEL Event Body=\n%s\n", serder.pretty())
 
     def valAnchorBigs(self, serder, seqner, saider, bigers, toad, baks):
@@ -1320,11 +1306,10 @@ class Tever:
 
             if len(bindices) < toad:  # not fully witnessed yet
                 self.escrowPWEvent(serder=serder, seqner=seqner, saider=saider, bigers=bigers)
-                msg = (f"Failure satisfying toad={toad} on witness sigs "
-                       f"for {[siger.qb64 for siger in bigers]} "
-                       f"for evt = {serder.said}.")
-                logger.info(msg)
-                logger.debug(f"Event Body=\n{serder.ked}\n")
+                msg = (f"Failure satisfying toad = {toad} on witness sigs "
+                       f"for {[siger.qb64 for siger in bigers]} for evt = {serder.said}")
+                logger.info("Tever: %s", msg)
+                logger.debug(f"Event Body=\n%s\n", serder.pretty())
                 raise MissingWitnessSignatureError(msg)
         return bigers
 
@@ -1397,8 +1382,8 @@ class Tever:
         self.reger.putTibs(dgkey, [biger.qb64b for biger in bigers])
         self.reger.putTvt(dgkey, serder.raw)
         self.reger.putTwe(snKey(serder.preb, serder.sn), serder.saidb)
-        logger.info("Tever state: Escrowed partially witnessed "
-                    "event = %s\n", serder.ked)
+        logger.debug("Tever state: Escrowed partially witnessed "
+                     "event = %s", serder.ked)
 
     def escrowALEvent(self, serder, seqner, saider, bigers=None, baks=None):
         """ Update associated logs for escrow of anchorless event
@@ -1424,8 +1409,8 @@ class Tever:
             self.reger.delBaks(key)
             self.reger.putBaks(key, [bak.encode("utf-8") for bak in baks])
         self.reger.putTvt(key, serder.raw)
-        logger.info("Tever: Escrowed anchorless event event = %s", serder.said)
-        logger.debug("Event body=\n%s\n", serder.ked)
+        logger.debug("Tever state: Escrowed anchorless event "
+                     "event = %s", serder.ked)
         return self.reger.putTae(snKey(serder.preb, serder.sn), serder.saidb)
 
     def getBackerState(self, ked):
@@ -1544,13 +1529,14 @@ class Tevery:
         regk = self.registryKey(serder)
         pre = serder.pre
         ked = serder.ked
-        sn = ked["s"]
+        #sn = ked["s"]
         ilk = ked["t"]
 
         inceptive = ilk in (Ilks.vcp, Ilks.iss, Ilks.bis)
 
         # validate SN for
-        sn = validateSN(sn, inceptive=inceptive)
+        #sn = validateSN(sn, inceptive=inceptive)
+        sn = Number(numh=ked["s"]).validate(inceptive=inceptive).sn
 
         if not self.lax:
             if self.local:
@@ -1584,14 +1570,19 @@ class Tevery:
             else:
                 # out of order, need to escrow
                 self.escrowOOEvent(serder=serder, seqner=seqner, saider=saider)
-                raise OutOfOrderError("escrowed out of order event {}".format(ked))
+                msg = f"Escrowed out of order event of type = {ilk} pre = {pre} SAID = {serder.said}"
+                logger.debug("Tevery: %s", msg)
+                logger.debug("TEL Event Body=\n%s\n", serder.pretty())
+                raise OutOfOrderError(msg)
 
         else:
             if ilk in (Ilks.vcp,):
                 # we don't have multiple signatures to verify so this
-                # is already first seen and then lifely duplicitious
-                logger.debug("Likely Duplicitous event Body=%s", serder.pretty())
-                raise LikelyDuplicitousError(f"Likely Duplicitous event={serder.said}")
+                # is already first seen and then likely duplicitious
+                msg = f"Likely Duplicitous Event of type={serder.ilk} sn={sn} SAID={serder.said}"
+                logger.debug("Tevery: %s", msg)
+                logger.debug("TEL Event Body=\n%s\n", serder.pretty())
+                raise LikelyDuplicitousError(msg)
 
             tever = self.tevers[regk]
             tever.cues = self.cues
@@ -1617,8 +1608,10 @@ class Tevery:
                     # self.cues.append(dict(kin="receipt", serder=serder))
                     pass
             else:  # duplicitious
-                logger.debug("Likely Duplicitous event Body=%s", serder.pretty())
-                raise LikelyDuplicitousError(f"Likely Duplicitous event={serder.said} with sn {serder.sn}")
+                msg = f"Likely Duplicitous Event type={serder.ilk} sn={sn} SAID={serder.said}"
+                logger.debug("Tevery: %s", msg)
+                logger.debug("TEL Event Body=\n%s\n", serder.pretty())
+                raise LikelyDuplicitousError(msg)
 
     def processQuery(self, serder, source=None, sigers=None, cigars=None):
         """ Process TEL query event message (qry)
@@ -2010,8 +2003,8 @@ class Tevery:
         sealet = seqner.qb64b + saider.qb64b
         self.reger.putAnc(key, sealet)
         self.reger.putOot(snKey(serder.preb, serder.sn), serder.saidb)
-        logger.info("Tever state: Escrowed our of order TEL event "
-                    "event = %s\n", serder.ked)
+        logger.debug("Tever state: Escrowed our of order TEL event "
+                     "event = %s", serder.ked)
 
     def processEscrows(self):
         """ Loop through escrows and process and events that may now be finalized """
@@ -2032,9 +2025,9 @@ class Tevery:
 
         except Exception as ex:  # log diagnostics errors etc
             if logger.isEnabledFor(logging.DEBUG):
-                logger.exception("Tevery escrow process error: %s\n", ex.args[0])
+                logger.exception("Tevery escrow process error: %s", ex.args[0])
             else:
-                logger.error("Tevery escrow process error: %s\n", ex.args[0])
+                logger.error("Tevery escrow process error: %s", ex.args[0])
 
     def processEscrowOutOfOrders(self):
         """ Loop through out of order escrow:
@@ -2047,32 +2040,29 @@ class Tevery:
            5. Remove event digest from oots if processed successfully or a non-out-of-order event occurs.
 
         """
-        for (pre, snb, digb) in self.reger.getOotItemIter():
+        for key, digb in self.reger.getOotItemIter(): # (pre, snb, digb) in self.reger.getOotItemIter()
             try:
-                sn = int(snb, 16)
+                #sn = int(snb, 16)
+                pre, sn = splitSnKey(key)
                 dgkey = dgKey(pre, digb)
                 traw = self.reger.getTvt(dgkey)
                 if traw is None:
                     # no event so raise ValidationError which unescrows below
-                    logger.info("Tevery unescrow error: Missing event at."
-                                "dig = %s\n", bytes(digb))
-
-                    raise ValidationError("Missing escrowed evt at dig = {}."
-                                          "".format(bytes(digb)))
+                    msg = f"OOO Missing escrowed event at dig = {bytes(digb).decode()}"
+                    logger.info("Tevery unescrow error: %s", msg)
+                    raise ValidationError(msg)
 
                 tserder = serdering.SerderKERI(raw=bytes(traw))  # escrowed event
 
                 bigers = None
                 if tibs := self.reger.getTibs(key=dgkey):
-                    bigers = [coring.Siger(qb64b=tib) for tib in tibs]
+                    bigers = [indexing.Siger(qb64b=tib) for tib in tibs]
 
                 couple = self.reger.getAnc(dgkey)
                 if couple is None:
-                    logger.info("Tevery unescrow error: Missing anchor at."
-                                "dig = %s\n", bytes(digb))
-
-                    raise ValidationError("Missing escrowed anchor at dig = {}."
-                                          "".format(bytes(digb)))
+                    msg = f"OOO Missing escrowed anchor at dig = {bytes(digb).decode()}"
+                    logger.info("Tevery unescrow error: %s", msg)
+                    raise ValidationError(msg)
                 ancb = bytearray(couple)
                 seqner = coring.Seqner(qb64b=ancb, strip=True)
                 saider = coring.Saider(qb64b=ancb, strip=True)
@@ -2082,24 +2072,25 @@ class Tevery:
             except OutOfOrderError as ex:
                 # still waiting on missing prior event to validate
                 if logger.isEnabledFor(logging.TRACE):
-                    logger.trace("Tevery unescrow failed: %s\n", ex.args[0])
-                    logger.exception("Tevery unescrow failed: %s\n", ex.args[0])
+                    logger.trace("Tevery: OOO unescrow failed: %s\n", ex.args[0])
+                    logger.exception("Tevery: OOO unescrow failed: %s\n", ex.args[0])
 
             except Exception as ex:  # log diagnostics errors etc
                 # error other than out of order so remove from OO escrow
                 self.reger.delOot(snKey(pre, sn))  # removes one escrow at key val
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.exception("Tevery unescrowed: %s\n", ex.args[0])
+                    logger.exception("Tevery: OOO unescrowed: %s", ex.args[0])
                 else:
-                    logger.error("Tevery unescrowed: %s\n", ex.args[0])
+                    logger.error("Tevery: OOO unescrowed: %s", ex.args[0])
 
             else:  # unescrow succeeded, remove from escrow
                 # We don't remove all escrows at pre,sn because some might be
                 # duplicitous so we process remaining escrows in spite of found
                 # valid event escrow.
                 self.reger.delOot(snKey(pre, sn))  # removes from escrow
-                logger.info("Tevery unescrow succeeded in valid event: event = %s", tserder.said)
-                logger.debug("Event Body=\n%s\n", tserder.pretty())
+                logger.info("Tevery: OOO unescrow succeeded in valid event: "
+                            "said=%s", tserder.said)
+                logger.debug("Event=\n%s\n", tserder.pretty())
 
     def processEscrowAnchorless(self):
         """ Process escrow of TEL events received before the anchoring KEL event.
@@ -2113,27 +2104,28 @@ class Tevery:
            6. Remove event digest from oots if processed successfully or a non-anchorless event occurs.
 
         """
-        for (pre, snb, digb) in self.reger.getTaeItemIter():
-            sn = int(snb, 16)
+        for key, digb in self.reger.getTaeItemIter():  #(pre, snb, digb) in self.reger.getTaeItemIter()
+            pre, sn = splitSnKey(key)
+            #sn = int(snb, 16)
             try:
                 dgkey = dgKey(pre, digb)
                 traw = self.reger.getTvt(dgkey)
                 if traw is None:
                     # no event so raise ValidationError which unescrows below
-                    msg = f"Tevery: anchorless escrow unescrow error: Missing event at dig = {bytes(digb)}"
-                    logger.trace(msg)
+                    msg = f"ANC Missing escrowed event at dig = {bytes(digb).decode()}"
+                    logger.trace("Tevery unescrow error: %s", msg)
                     raise ValidationError(msg)
 
                 tserder = serdering.SerderKERI(raw=bytes(traw))  # escrowed event
 
                 bigers = None
                 if tibs := self.reger.getTibs(key=dgkey):
-                    bigers = [coring.Siger(qb64b=tib) for tib in tibs]
+                    bigers = [indexing.Siger(qb64b=tib) for tib in tibs]
 
                 couple = self.reger.getAnc(dgkey)
                 if couple is None:
-                    msg = f"Tevery: anchorless escrow unescrow error: Missing anchor at dig = {bytes(digb)}"
-                    logger.trace(msg)
+                    msg = f"ANC Missing escrowed anchor at dig = {bytes(digb).decode()}"
+                    logger.trace("Tevery unescrow error: %s", msg)
                     raise MissingAnchorError(msg)
                 ancb = bytearray(couple)
                 seqner = coring.Seqner(qb64b=ancb, strip=True)
@@ -2143,23 +2135,24 @@ class Tevery:
 
             except MissingAnchorError as ex:
                 # still waiting on missing prior event to validate
-                if logger.isEnabledFor(logging.TRACE):
-                    logger.trace("Tevery: anchorless escrow unescrow failed: %s\n", ex.args[0])
-                    logger.exception("Tevery: anchorless escrow unescrow failed: %s\n", ex.args[0])
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.exception("Tevery ANC unescrow failed: %s", ex.args[0])
+                else:
+                    logger.error("Tevery ANC unescrow failed: %s", ex.args[0])
 
             except Exception as ex:  # log diagnostics errors etc
                 # error other than out of order so remove from OO escrow
                 self.reger.delTae(snKey(pre, sn))  # removes one escrow at key val
                 if logger.isEnabledFor(logging.DEBUG):
-                    logger.exception("Tevery: anchorless escrow other error on unescrow: %s\n", ex.args[0])
+                    logger.exception("Tevery ANC unescrowed: %s", ex.args[0])
                 else:
-                    logger.error("Tevery: anchorless escrow other error on unescrow: %s\n", ex.args[0])
+                    logger.error("Tevery ANC unescrowed: %s", ex.args[0])
 
             else:  # unescrow succeeded, remove from escrow
                 # We don't remove all escrows at pre,sn because some might be
                 # duplicitous so we process remaining escrows in spite of found
                 # valid event escrow.
                 self.reger.delTae(snKey(pre, sn))  # removes from escrow
-                logger.info("Tevery: anchorless escrow unescrow succeeded in valid event: "
-                            "event = %s", tserder.said)
-                logger.debug("Event body=\n%s\n", tserder.pretty())
+                logger.info("Tevery ANC unescrow succeeded in valid event: "
+                            "said=%s", tserder.said)
+                logger.debug("event=\n%s\n", tserder.pretty())

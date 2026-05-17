@@ -15,7 +15,7 @@ from keri.core import serdering
 
 logger = help.ogler.getLogger()
 
-parser = argparse.ArgumentParser(description='List credentials and check mailboxes for any newly issued credentials')
+parser = argparse.ArgumentParser(description='Export key events in CESR stream format')
 parser.set_defaults(handler=lambda args: export(args),
                     transferable=True)
 parser.add_argument('--name', '-n', help='keystore name and file location of KERI keystore', required=True)
@@ -23,7 +23,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--files", help="export artifacts to individual files keyed off of AIDs or SAIDS, default is "
                                     "stdout", action="store_true")
@@ -57,7 +57,7 @@ class ExportDoer(doing.DoDoer):
 
         super(ExportDoer, self).__init__(doers=doers)
 
-    def exportDo(self, tymth, tock=0.0):
+    def exportDo(self, tymth, tock=0.0, **kwa):
         """ Export credential from store and any related material
 
         Parameters:
@@ -106,11 +106,10 @@ class ExportDoer(doing.DoDoer):
             f = open(f"{pre}-ends.cesr", "w")
 
         msgs = self.hab.replyToOobi(aid=pre, role="controller")
-        for msg in msgs:
-            if f is not None:
-                f.write(msg.decode("utf-8"))
-            else:
-                serder = serdering.SerderKERI(raw=msg)
-                atc = msg[serder.size:]
-                sys.stdout.write(serder.raw.decode("utf-8"))
-                sys.stdout.write(atc.decode("utf-8"))
+        if f is not None:
+            f.write(msgs.decode("utf-8"))
+        else:
+            serder = serdering.SerderKERI(raw=msgs)
+            atc = msgs[serder.size:]
+            sys.stdout.write(serder.raw.decode("utf-8"))
+            sys.stdout.write(atc.decode("utf-8"))

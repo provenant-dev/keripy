@@ -26,7 +26,7 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--group', '-g', help='human-readable name for the multisig group identifier prefix', required=False, default=None)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--auto", "-Y", help="auto approve any delegation request non-interactively", action="store_true")
 
@@ -97,7 +97,7 @@ class JoinDoer(doing.DoDoer):
         self.auto = auto
         super(JoinDoer, self).__init__(doers=doers)
 
-    def joinDo(self, tymth, tock=0.0):
+    def joinDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of
@@ -182,12 +182,12 @@ class JoinDoer(doing.DoDoer):
         inits["isith"] = oicp.ked["kt"]
         inits["nsith"] = oicp.ked["nt"]
 
-        inits["estOnly"] = eventing.TraitCodex.EstOnly in oicp.ked["c"]
-        inits["DnD"] = eventing.TraitCodex.DoNotDelegate in oicp.ked["c"]
+        inits["estOnly"] = kering.TraitCodex.EstOnly in oicp.ked["c"]
+        inits["DnD"] = kering.TraitCodex.DoNotDelegate in oicp.ked["c"]
 
         inits["toad"] = oicp.ked["bt"]
         inits["wits"] = oicp.ked["b"]
-        inits["delpre"] = oicp.ked["di"] if "di" in ked else None
+        inits["delpre"] = oicp.ked["di"] if "di" in oicp.ked else None
 
         print()
         print("Group Multisig Inception proposed:")
@@ -351,8 +351,8 @@ class JoinDoer(doing.DoDoer):
         if not thold.weighted:
             tab.add_row(["Signature Threshold", thold.num])
 
-        tab.add_row(["Establishment Only", eventing.TraitCodex.EstOnly in ked["c"]])
-        tab.add_row(["Do Not Delegate", eventing.TraitCodex.DoNotDelegate in ked["c"]])
+        tab.add_row(["Establishment Only", eventing.TraitDex.EstOnly in ked["c"]])
+        tab.add_row(["Do Not Delegate", eventing.TraitDex.DoNotDelegate in ked["c"]])
         tab.add_row(["Witness Threshold", ked["bt"]])
         tab.add_row(["Witnesses", "\n".join(ked["b"])])
 

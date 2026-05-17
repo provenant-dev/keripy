@@ -40,7 +40,7 @@ class Poster(doing.DoDoer):
         doers = [doing.doify(self.deliverDo)]
         super(Poster, self).__init__(doers=doers, **kwa)
 
-    def deliverDo(self, tymth=None, tock=0.0):
+    def deliverDo(self, tymth=None, tock=0.0, **kwa):
         """
         Returns:  doifiable Doist compatible generator method that processes
                    a queue of messages and envelopes them in a `fwd` message
@@ -86,7 +86,7 @@ class Poster(doing.DoDoer):
                     elif Roles.witness in ends:
                         yield from self.forwardToWitness(hab, ends[Roles.witness], recp=recp, serder=srdr, atc=atc, topic=tpc)
                     else:
-                        logger.info(f"No end roles for {recp} to send evt={recp}")
+                        logger.info(f"No end roles for {recp} to send evt={srdr.said}")
                         continue
                 except kering.ConfigurationError as e:
                     logger.error(f"Error sending to {recp} with ends={ends}.  Err={e}")
@@ -136,15 +136,14 @@ class Poster(doing.DoDoer):
 
         return False
 
-    def sendEvent(self, hab, fn=0):
+    def sendEventToDelegator(self, sender, hab, fn=0):
         """ Returns generator for sending event and waiting until send is complete """
         # Send KEL event for processing
         icp = self.hby.db.cloneEvtMsg(pre=hab.pre, fn=fn, dig=hab.kever.serder.saidb)
         ser = serdering.SerderKERI(raw=icp)
         del icp[:ser.size]
 
-        sender = hab.mhab.pre if isinstance(hab, GroupHab) else hab.pre
-        self.send(src=sender, dest=hab.kever.delegator, topic="delegate", serder=ser, attachment=icp)
+        self.send(src=sender.pre, dest=hab.kever.delpre, topic="delegate", serder=ser, attachment=icp)
         while True:
             if self.cues:
                 cue = self.cues.popleft()
@@ -452,7 +451,7 @@ class ForwardHandler:
         pevt = bytearray()
         for pather, atc in attachments:
             ked = pather.resolve(embeds)
-            sadder = coring.Sadder(ked=ked, kind=eventing.Serials.json)
+            sadder = coring.Sadder(ked=ked, kind=eventing.Kinds.json)
             pevt.extend(sadder.raw)
             pevt.extend(atc)
 

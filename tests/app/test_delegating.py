@@ -7,19 +7,23 @@ import time
 from hio.base import doing, tyming
 
 from keri import kering
-from keri.app import habbing, delegating, indirecting, agenting, notifying
+
+from keri import core
 from keri.core import eventing, parsing, coring
+
+from keri.app import habbing, delegating, indirecting, agenting, notifying
+
 from keri.db import dbing
 
 
-def test_boatswain(seeder):
-    with habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
-            habbing.openHby(name="pal", salt=coring.Salter(raw=b'0123456789abcdef').qb64) as palHby, \
-            habbing.openHby(name="del", salt=coring.Salter(raw=b'0123456789ghijkl').qb64) as delHby:
+def test_anchorer(seeder):
+    with habbing.openHby(name="wes", salt=core.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
+            habbing.openHby(name="pal", salt=core.Salter(raw=b'0123456789abcdef').qb64) as palHby, \
+            habbing.openHby(name="del", salt=core.Salter(raw=b'0123456789ghijkl').qb64) as delHby:
 
         wesDoers = indirecting.setupWitness(alias="wes", hby=wesHby, tcpPort=5634, httpPort=5644)
         witDoer = agenting.Receiptor(hby=palHby)
-        bts = delegating.Sealer(hby=delHby)
+        bts = delegating.Anchorer(hby=delHby)
 
         wesHab = wesHby.habByName(name="wes")
         seeder.seedWitEnds(palHby.db, witHabs=[wesHab], protocols=[kering.Schemes.http])
@@ -33,7 +37,7 @@ def test_boatswain(seeder):
             bts=bts
         )
 
-        doers = wesDoers + [witDoer, bts, doing.doify(boatswain_test_do, **opts)]
+        doers = wesDoers + [witDoer, bts, doing.doify(anchorer_test_do, **opts)]
 
         limit = 1.0
         tock = 0.03125
@@ -60,7 +64,7 @@ def test_boatswain(seeder):
         assert bytes(delHby.db.getAes(dgkey)) == couple
 
 
-def boatswain_test_do(tymth=None, tock=0.0, **opts):
+def anchorer_test_do(tymth=None, tock=0.0, **opts):
     yield tock  # enter context
 
     wesHab = opts["wesHab"]
@@ -79,8 +83,8 @@ def boatswain_test_do(tymth=None, tock=0.0, **opts):
 
     witDoer.cues.popleft()
     msg = next(wesHab.db.clonePreIter(pre=palHab.pre))
-    kvy = eventing.Kevery(db=delHby.db, local=False)
-    parsing.Parser().parseOne(ims=bytearray(msg), kvy=kvy)
+    kvy = eventing.Kevery(db=delHby.db, local=True)
+    parsing.Parser().parseOne(ims=bytearray(msg), kvy=kvy, local=True)
 
     while palHab.pre not in delHby.kevers:
         yield tock
@@ -107,8 +111,8 @@ def boatswain_test_do(tymth=None, tock=0.0, **opts):
     couple = coring.Seqner(sn=palHab.kever.sn).qb64b + palHab.kever.serder.saidb
 
     msg = next(wesHab.db.clonePreIter(pre=palHab.pre, fn=1))
-    kvy = eventing.Kevery(db=delHby.db, local=False)
-    parsing.Parser().parseOne(ims=bytearray(msg), kvy=kvy)
+    kvy = eventing.Kevery(db=delHby.db, local=True)
+    parsing.Parser().parseOne(ims=bytearray(msg), kvy=kvy, local=True)
 
     # Wait for the anchor.  If we timeout before that happens, assertion in test will fail
     while delHby.db.getAes(dgkey) != couple:
@@ -116,7 +120,7 @@ def boatswain_test_do(tymth=None, tock=0.0, **opts):
 
 
 def test_delegation_request(mockHelpingNowUTC):
-    with habbing.openHab(name="test", temp=True) as (hby, hab):
+    with habbing.openHab(name="test", temp=True, salt=b'0123456789abcdef') as (hby, hab):
 
         delpre = "EArzbTSWjccrTdNRsFUUfwaJ2dpYxu9_5jI2PJ-TRri0"
         serder = eventing.delcept(keys=["DUEFuPeaDH2TySI-wX7CY_uW5FF41LRu3a59jxg1_pMs"], delpre=delpre,
@@ -124,15 +128,17 @@ def test_delegation_request(mockHelpingNowUTC):
         evt = hab.endorse(serder=serder)
         exn, atc = delegating.delegateRequestExn(hab=hab, delpre=delpre, evt=evt)
 
-        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg'
-                       b'-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAAAAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3'
-                       b'-AABAACzeUyP6__0oDca-Oiv2iGXKghBw_8sI4ZHyyeMedvz0iZIIQYqJd2Zt7cDHRh7xBGWI85J_oOixLET3mFZUu0A')
+        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAA'
+                       b'AAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3-AABAACzeUyP'
+                       b'6__0oDca-Oiv2iGXKghBw_8sI4ZHyyeMedvz0iZIIQYqJd2Zt7cDHRh7xBGWI85J'
+                       b'_oOixLET3mFZUu0A')
 
         assert exn.ked["r"] == '/delegate/request'
         assert exn.saidb == b'EHPkcmdLGql9_1WD0wl0OalYk8PcF4HMMd7gGi-iqfSe'
-        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg'
-                       b'-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAAAAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3'
-                       b'-AABAACzeUyP6__0oDca-Oiv2iGXKghBw_8sI4ZHyyeMedvz0iZIIQYqJd2Zt7cDHRh7xBGWI85J_oOixLET3mFZUu0A')
+        assert atc == (b'-FABEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI30AAAAAAAAAAAAAAA'
+                       b'AAAAAAAAEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3-AABAACzeUyP'
+                       b'6__0oDca-Oiv2iGXKghBw_8sI4ZHyyeMedvz0iZIIQYqJd2Zt7cDHRh7xBGWI85J'
+                       b'_oOixLET3mFZUu0A')
         data = exn.ked["a"]
         assert data["delpre"] == delpre
         embeds = exn.ked['e']

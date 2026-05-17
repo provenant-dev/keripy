@@ -72,7 +72,7 @@ class WalletDoer(doing.DoDoer):
 
         super(WalletDoer, self).__init__(doers=doers, **kwa)
 
-    def escrowDo(self, tymth, tock=0.0):
+    def escrowDo(self, tymth, tock=0.0, **kwa):
         """ Processes the escrows for group icp, rot and ixn request messages.
 
         Parameters:
@@ -96,7 +96,7 @@ class WalletDoer(doing.DoDoer):
             self.verifier.processEscrows()
             yield self.tock
 
-    def verifierDo(self, tymth, tock=0.0):
+    def verifierDo(self, tymth, tock=0.0, **kwa):
         """ Process cues from Verifier coroutine
 
         Parameters:

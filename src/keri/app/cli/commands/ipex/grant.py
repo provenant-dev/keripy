@@ -23,7 +23,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--recipient", "-r", help="alias or qb64 identifier prefix of the self.recp of "
@@ -71,7 +71,7 @@ class GrantDoer(doing.DoDoer):
         self.toRemove = [mbx]
         super(GrantDoer, self).__init__(doers=self.toRemove + [doing.doify(self.grantDo)])
 
-    def grantDo(self, tymth, tock=0.0):
+    def grantDo(self, tymth, tock=0.0, **kwa):
         """ Grant credential by creating /ipex/grant exn message
 
         Parameters:
@@ -108,11 +108,11 @@ class GrantDoer(doing.DoDoer):
 
         iss = self.rgy.reger.cloneTvtAt(creder.said)
 
-        iserder = serdering.SerderKERI(raw=bytes(iss))  # coring.Serder(raw=bytes(iss))
+        iserder = serdering.SerderKERI(raw=bytes(iss))
         seqner = coring.Seqner(sn=iserder.sn)
 
-        serder = self.hby.db.findAnchoringSealEvent(creder.sad['i'],
-                                                    seal=dict(i=iserder.pre, s=seqner.snh, d=iserder.said))
+        serder = self.hby.db.fetchLastSealingEventByEventSeal(creder.sad['i'],
+                                                              seal=dict(i=iserder.pre, s=seqner.snh, d=iserder.said))
         anc = self.hby.db.cloneEvtMsg(pre=serder.pre, fn=0, dig=serder.said)
 
         exn, atc = protocoling.ipexGrantExn(hab=self.hab, recp=recp, message=self.message, acdc=acdc, iss=iss, anc=anc,

@@ -4,12 +4,16 @@ tests.app.test_multisig module
 
 """
 import datetime
+import os
 
 import pytest
 
 from keri.app import notifying, habbing
+from keri.app.notifying import Noter, KERINoterMapSizeKey
 from keri.core import coring
 from keri.db import dbing
+from keri.db.basing import KERIBaserMapSizeKey
+from keri.db.dbing import LMDBer, KERILMDBMapSizeKey
 from keri.help import helping
 
 
@@ -105,7 +109,7 @@ def test_dictersuber():
         assert res[2].attrs['a'] == 3
 
 
-def test_noter():
+def test_noter(mockHelpingNowUTC):
     noter = notifying.Noter()
     assert noter.path.endswith("/not/not")
     noter.reopen()
@@ -137,12 +141,14 @@ def test_noter():
     notes = noter.getNotes(start=0)
     assert len(notes) == 0
 
-    dt = datetime.datetime.now()
-    note = notifying.notice(attrs=dict(a=1))
+    note = notifying.notice(attrs=dict(a=1), 
+                            dt=helping.fromIso8601("2022-07-08T15:01:05.453632"))
     assert noter.add(note, cig) is True
-    note = notifying.notice(attrs=dict(a=2))
+    note = notifying.notice(attrs=dict(a=2), 
+                            dt=helping.fromIso8601("2022-07-08T15:01:06.453632"))
     assert noter.add(note, cig) is True
-    note = notifying.notice(attrs=dict(a=3))
+    note = notifying.notice(attrs=dict(a=3), 
+                            dt=helping.fromIso8601("2022-07-08T15:01:07.453632"))
     assert noter.add(note, cig) is True
 
     res = []
@@ -164,12 +170,13 @@ def test_noter():
         res.append(note)
 
     assert len(res) == 5
+    assert res[0][0].datetime == "2021-01-01T00:00:00.000000+00:00"
 
     cnt = noter.getNoteCnt()
     assert cnt == 13
 
 
-def test_notifier():
+def test_notifier(mockHelpingNowUTC):
     with habbing.openHby(name="test") as hby:
         notifier = notifying.Notifier(hby=hby)
         assert notifier.signaler is not None
@@ -200,13 +207,15 @@ def test_notifier():
         assert notifier.rem(note.rid) is True
         assert notifier.getNotes() == []
 
-        dt = datetime.datetime.now()
+        dt = helping.nowIso8601()
         assert notifier.add(attrs=dict(a=1)) is True
         assert notifier.add(attrs=dict(a=2)) is True
         assert notifier.add(attrs=dict(a=3)) is True
 
         notes = notifier.getNotes()
         assert len(notes) == 3
+
+        assert notes[2].datetime == "2021-01-01T00:00:00.000000+00:00"
 
     payload = dict(a=1, b=2, c=3)
     dt = helping.fromIso8601("2022-07-08T15:01:05.453632")
@@ -216,3 +225,41 @@ def test_notifier():
 
     assert notifier.mar(note.rid) is False
     assert notifier.rem(note.rid) is True
+
+def test_noter_db_size_set_from_env_var():
+    # Clear environment before test
+    if KERILMDBMapSizeKey in os.environ:
+        os.environ.pop(KERILMDBMapSizeKey)
+    if KERINoterMapSizeKey in os.environ:
+        os.environ.pop(KERINoterMapSizeKey)
+
+    new_map_size = 10737418240
+    # Default map size works
+    noter = Noter()
+    assert noter.env.info()['map_size'] != new_map_size, "Expected map size to be the default 10MB"
+    assert noter.env.info()['map_size'] == LMDBer.MapSize, "Expected map size to be the default 10MB"
+    noter.close()
+
+    # Specific map size works
+    os.environ[KERINoterMapSizeKey] = f"{new_map_size}"
+
+    noter = Noter()
+    assert noter.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    os.environ.pop(KERINoterMapSizeKey)
+    noter.close()
+
+    # generic map size works
+    baser_map_size = 10737418240
+    os.environ[KERILMDBMapSizeKey] = f"{baser_map_size}"
+
+    noter = Noter()
+    assert noter.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    noter.close()
+
+    # bad map size throws
+    os.environ[KERINoterMapSizeKey] = f"bad_map_size"
+    with pytest.raises(ValueError) as excinfo:
+        Noter()
+    assert "invalid literal for int" in str(excinfo.value), "Expected ValueError when map size is not an integer"
+    os.environ.pop(KERILMDBMapSizeKey)
+    os.environ.pop(KERINoterMapSizeKey)

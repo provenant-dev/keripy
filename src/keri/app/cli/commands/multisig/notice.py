@@ -26,7 +26,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the new iden
 parser.add_argument("--config", "-c", help="directory override for configuration data")
 
 # Authentication for keystore
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--aeid', help='qualified base64 of non-transferable identifier prefix for  authentication '
                                    'and encryption of secrets in keystore', default=None)
@@ -66,7 +66,7 @@ class NoticeDoer(doing.DoDoer):
 
         super(NoticeDoer, self).__init__(doers=doers)
 
-    def noticeDo(self, tymth, tock=0.0):
+    def noticeDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of

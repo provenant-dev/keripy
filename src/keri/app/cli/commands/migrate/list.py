@@ -1,10 +1,9 @@
 # -*- encoding: utf-8 -*-
 """
-keri.kli.commands.migrate.list module
+keri.kli.commands module
 
 """
 import argparse
-import logging
 
 from keri import help
 from hio.base import doing
@@ -13,6 +12,7 @@ from prettytable import PrettyTable
 from keri.app.cli.common import existing
 
 logger = help.ogler.getLogger()
+
 
 def handler(args):
     """
@@ -53,7 +53,7 @@ class ListDoer(doing.Doer):
         tab.align["Name"] = "l"
 
         hby = existing.setupHby(name=self.args.name, base=self.args.base,
-                                bran=self.args.bran if self.args.bran else None, temp=self.args.temp)
+                                bran=self.args.bran, temp=self.args.temp)
 
         for idx, (name, dater) in enumerate(hby.db.complete()):
             print(name, dater)

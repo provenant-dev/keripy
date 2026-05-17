@@ -7,22 +7,21 @@ VIR  Verifiable Issuance(Revocation) Registry
 Provides public simple Verifiable Credential Issuance/Revocation Registry
 A special purpose Verifiable Data Registry (VDR)
 """
-
+import os
 from dataclasses import dataclass, field, asdict
-from  ordered_set import OrderedSet as oset
 
-from ..db import koming, subing, escrowing
-
-from .. import kering
-from ..app import signing
-from ..core import coring, serdering
-from ..db import dbing, basing
-from ..vdr import eventing
+from ordered_set import OrderedSet as oset
 
 from keri import help
+from .. import kering, core
+from ..app import signing
+from ..core import coring, serdering, indexing, counting
+from ..db import dbing, basing
+from ..db import koming, subing, escrowing
+from ..db.dbing import snKey
+from ..vdr import eventing
 
 logger = help.ogler.getLogger()
-
 
 class rbdict(dict):
     """ Reger backed read through cache for registry state
@@ -171,6 +170,9 @@ def openReger(name="test", **kwa):
     """
     return dbing.openLMDB(cls=Reger, name=name, **kwa)
 
+# Env var for configuring LMDB size for the Keeper database
+KERIRegerMapSizeKey = "KERI_REGER_MAP_SIZE"
+
 
 class Reger(dbing.LMDBer):
     """ Reger sets up named sub databases for TEL registry
@@ -277,6 +279,15 @@ class Reger(dbing.LMDBer):
         else:
             self._tevers = dict()
 
+        mapSize = os.getenv(dbing.KERIRegerMapSizeKey) or os.getenv(dbing.KERILMDBMapSizeKey)
+        if mapSize is not None:
+            try:
+                self.MapSize = int(mapSize)
+            except ValueError:
+                logger.error(f"LMDB map size environment variable must be an integer value > 1! "
+                            f"Use {dbing.KERIRegerMapSizeKey} or {dbing.KERILMDBMapSizeKey}")
+                raise
+
         super(Reger, self).__init__(headDirPath=headDirPath, reopen=reopen, **kwa)
 
 
@@ -329,7 +340,7 @@ class Reger(dbing.LMDBer):
         # given by quintuple (saider.qb64, path, prefixer.qb64, seqner.q64, diger.qb64)
         # of credential and trans signer's key state est evt to val Siger for each
         # signature.
-        self.spsgs = subing.CesrIoSetSuber(db=self, subkey='ssgs.', klas=coring.Siger)
+        self.spsgs = subing.CesrIoSetSuber(db=self, subkey='ssgs.', klas=indexing.Siger)
 
         # all sad path scgs  (sad pathed non-indexed signature serializations) maps
         # couple (SAD SAID, path) to couple (Verfer, Cigar) of nontrans signer of signature in Cigar
@@ -474,11 +485,11 @@ class Reger(dbing.LMDBer):
                 )
             )
 
-            ctr = coring.Counter(qb64b=iss, strip=True)
-            if ctr.code == coring.CtrDex.AttachedMaterialQuadlets:
-                ctr = coring.Counter(qb64b=iss, strip=True)
+            ctr = core.Counter(qb64b=iss, strip=True, gvrsn=kering.Vrsn_1_0)
+            if ctr.code == counting.CtrDex_1_0.AttachmentGroup:
+                ctr = core.Counter(qb64b=iss, strip=True, gvrsn=kering.Vrsn_1_0)
 
-            if ctr.code == coring.CtrDex.SealSourceCouples:
+            if ctr.code == counting.CtrDex_1_0.SealSourceCouples:
                 coring.Seqner(qb64b=iss, strip=True)
                 saider = coring.Saider(qb64b=iss)
 
@@ -520,6 +531,8 @@ class Reger(dbing.LMDBer):
         """
 
         creder = self.creds.get(keys=(said,))
+        if creder is None:
+            raise kering.MissingEntryError(f"no credential found with said {said}")
         prefixer, seqner, saider = self.cancs.get(keys=(said,))
         return creder, prefixer, seqner, saider
 
@@ -541,7 +554,7 @@ class Reger(dbing.LMDBer):
         if hasattr(pre, 'encode'):
             pre = pre.encode("utf-8")
 
-        for fn, dig in self.getTelItemPreIter(pre, fn=fn):
+        for _, fn, dig in self.getTelItemPreIter(pre, fn=fn):
             msg = self.cloneTvt(pre, dig)
             yield msg
 
@@ -560,24 +573,24 @@ class Reger(dbing.LMDBer):
 
         # add indexed backer signatures to attachments
         if tibs := self.getTibs(key=dgkey):
-            atc.extend(coring.Counter(code=coring.CtrDex.WitnessIdxSigs,
-                                      count=len(tibs)).qb64b)
+            atc.extend(core.Counter(core.Codens.WitnessIdxSigs, count=len(tibs),
+                                    gvrsn=kering.Vrsn_1_0).qb64b)
             for tib in tibs:
                 atc.extend(tib)
 
         # add authorizer (delegator/issure) source seal event couple to attachments
         couple = self.getAnc(dgkey)
         if couple is not None:
-            atc.extend(coring.Counter(code=coring.CtrDex.SealSourceCouples,
-                                      count=1).qb64b)
+            atc.extend(core.Counter(core.Codens.SealSourceCouples, count=1,
+                                    gvrsn=kering.Vrsn_1_0).qb64b)
             atc.extend(couple)
 
         # prepend pipelining counter to attachments
         if len(atc) % 4:
             raise ValueError("Invalid attachments size={}, nonintegral"
                              " quadlets.".format(len(atc)))
-        pcnt = coring.Counter(code=coring.CtrDex.AttachedMaterialQuadlets,
-                              count=(len(atc) // 4)).qb64b
+        pcnt = core.Counter(core.Codens.AttachmentGroup, count=(len(atc) // 4),
+                            gvrsn=kering.Vrsn_1_0).qb64b
         msg.extend(pcnt)
         msg.extend(atc)
         return msg
@@ -608,7 +621,8 @@ class Reger(dbing.LMDBer):
         for said in saids:
             screder, prefixer, seqner, saider = self.cloneCred(said=said)
 
-            atc = bytearray(coring.Counter(coring.CtrDex.SealSourceTriples, count=1).qb64b)
+            atc = bytearray(core.Counter(core.Codens.SealSourceTriples, count=1,
+                                         gvrsn=kering.Vrsn_1_0).qb64b)
             atc.extend(prefixer.qb64b)
             atc.extend(seqner.qb64b)
             atc.extend(saider.qb64b)
@@ -703,7 +717,7 @@ class Reger(dbing.LMDBer):
             pre is bytes of itdentifier prefix
             fn is int fn to resume replay. Earliset is fn=0
         """
-        return self.getAllOrdItemPreIter(db=self.tels, pre=pre, on=fn)
+        return self.getOnItemIter(db=self.tels, key=pre, on=fn)
 
     def cntTels(self, pre, fn=0):
         """
@@ -717,7 +731,7 @@ class Reger(dbing.LMDBer):
         if hasattr(pre, "encode"):
             pre = pre.encode("utf-8")  # convert str to bytes
 
-        return self.cntValsAllPre(db=self.tels, pre=pre, on=fn)
+        return self.cntOnVals(db=self.tels, key=pre, on=fn)
 
     def getTibs(self, key):
         """
@@ -809,6 +823,13 @@ class Reger(dbing.LMDBer):
         """
         return self.delVal(self.twes, key)
 
+    def getTweItemIter(self):
+        """
+        Return iterator of all items in .twes
+
+        """
+        return self.getTopItemIter(self.twes)
+
     def putTae(self, key, val):
         """
         Use snKey()
@@ -841,7 +862,8 @@ class Reger(dbing.LMDBer):
         Return iterator of all items in .taes
 
         """
-        return self.getAllItemIter(self.taes, split=True)
+        return self.getTopItemIter(self.taes)
+
 
     def delTae(self, key):
         """
@@ -884,7 +906,8 @@ class Reger(dbing.LMDBer):
         Return iterator of all items in .taes
 
         """
-        return self.getAllItemIter(self.oots, split=True)
+        return self.getTopItemIter(self.oots)
+
 
     def delOot(self, key):
         """
@@ -939,7 +962,7 @@ class Reger(dbing.LMDBer):
         Returns True If at least one of vals is added as dup, False otherwise
         Duplicates are inserted in insertion order.
         """
-        return self.putIoVals(self.baks, key, vals)
+        return self.putIoDupVals(self.baks, key, vals)
 
 
     def addBak(self, key, val):
@@ -950,7 +973,7 @@ class Reger(dbing.LMDBer):
         Returns True If at least one of vals is added as dup, False otherwise
         Duplicates are inserted in insertion order.
         """
-        return self.addIoVal(self.baks, key, val)
+        return self.addIoDupVal(self.baks, key, val)
 
 
     def getBaks(self, key):
@@ -960,7 +983,7 @@ class Reger(dbing.LMDBer):
         Returns empty list if no entry at key
         Duplicates are retrieved in insertion order.
         """
-        return self.getIoVals(self.baks, key)
+        return self.getIoDupVals(self.baks, key)
 
 
     def getBaksIter(self, key):
@@ -970,7 +993,7 @@ class Reger(dbing.LMDBer):
         Raises StopIteration Error when empty
         Duplicates are retrieved in insertion order.
         """
-        return self.getIoValsIter(self.baks, key)
+        return self.getIoDupValsIter(self.baks, key)
 
     def cntBaks(self, key):
         """
@@ -978,7 +1001,7 @@ class Reger(dbing.LMDBer):
         Return count of backer prefixes at key
         Returns zero if no entry at key
         """
-        return self.cntIoVals(self.baks, key)
+        return self.cntIoDupVals(self.baks, key)
 
 
     def delBaks(self, key):
@@ -987,7 +1010,7 @@ class Reger(dbing.LMDBer):
         Deletes all values at key in db.
         Returns True If key exists in database Else False
         """
-        return self.delIoVals(self.baks, key)
+        return self.delIoDupVals(self.baks, key)
 
 
     def delBak(self, key, val):
@@ -1000,7 +1023,50 @@ class Reger(dbing.LMDBer):
             key is bytes of key within sub db's keyspace
             val is dup val (does not include insertion ordering proem)
         """
-        return self.delIoVal(self.baks, key, val)
+        return self.delIoDupVal(self.baks, key, val)
+
+    def clearEscrows(self):
+        """Clear credential event escrows"""
+        # self.oots, self.twes, self.taes
+        count = 0
+        for (k , _) in self.getOotItemIter():
+            count += 1
+            self.delOot(k)
+        logger.info(f"TEL: Cleared {count} out of order escrows.")
+
+        count = 0
+        for (k, _) in self.getTweItemIter():
+            count += 1
+            self.delTwe(k)
+        logger.info(f"TEL: Cleared {count} partially witnessed escrows.")
+
+        count = 0
+        for (k, _) in self.getTaeItemIter():
+            count += 1
+            self.delTae(k)
+        logger.info(f"TEL: Cleared {count} anchorless escrows.")
+
+        for name, sub, desc in [
+            ( 'mre',  self.mre, 'missing registry escrows'),
+            ( 'mce',  self.mce, 'broken chain escrows'),
+            ( 'mse',  self.mse, 'missing schema escrows'),
+            ('cmse', self.cmse, 'missing signature escrows'),
+            ('tpwe', self.tpwe, 'partial witness escrows'),
+            ('tmse', self.tmse, 'multisig escrows'),
+            ('tede', self.tede, 'event dissemination escrows')
+        ]:
+            sub.trim()
+            logger.info(f"TEL: Cleared escrow ({name.ljust(5)}): {desc}")
+
+        for typ in ["registry-mae", "registry-ooo", "credential-mre", "credential-mae", "credential-ooo"]:
+            count = 0
+            for keys, saider in self.txnsb.escrowdb.getItemIter(keys=(typ, "")):
+                count += 1
+                self.txnsb.escrowdb.rem(keys=keys, val=saider)
+                self.txnsb.removeState(saider)
+            logger.info(f"TEL: Cleared {count} broker escrows ({typ})")
+
+        logger.info("Cleared TEL escrows")
 
 
 def buildProof(prefixer, seqner, diger, sigers):
@@ -1016,12 +1082,14 @@ def buildProof(prefixer, seqner, diger, sigers):
     """
 
     prf = bytearray()
-    prf.extend(coring.Counter(coring.CtrDex.TransIdxSigGroups, count=1).qb64b)
+    prf.extend(core.Counter(core.Codens.TransIdxSigGroups, count=1,
+                            gvrsn=kering.Vrsn_1_0).qb64b)
     prf.extend(prefixer.qb64b)
     prf.extend(seqner.qb64b)
     prf.extend(diger.qb64b)
 
-    prf.extend(coring.Counter(code=coring.CtrDex.ControllerIdxSigs, count=len(sigers)).qb64b)
+    prf.extend(core.Counter(core.Codens.ControllerIdxSigs, count=len(sigers),
+                            gvrsn=kering.Vrsn_1_0).qb64b)
     for siger in sigers:
         prf.extend(siger.qb64b)
 
@@ -1044,8 +1112,8 @@ def messagize(creder, proof):
     if len(proof) % 4:
         raise ValueError("Invalid attachments size={}, nonintegral"
                          " quadlets.".format(len(proof)))
-    craw.extend(coring.Counter(code=coring.CtrDex.AttachedMaterialQuadlets,
-                               count=(len(proof) // 4)).qb64b)
+    craw.extend(core.Counter(core.Codens.AttachmentGroup, count=(len(proof) // 4),
+                             gvrsn=kering.Vrsn_1_0).qb64b)
     craw.extend(proof)
 
     return craw

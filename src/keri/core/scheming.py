@@ -12,7 +12,7 @@ import jsonschema
 import msgpack
 
 from . import coring
-from .coring import MtrDex, Serials, Saider, Saids
+from .coring import MtrDex, Kinds, Saider, Saids
 from .. import help, kering
 from ..kering import ValidationError, DeserializeError
 
@@ -109,7 +109,7 @@ class JSONSchema:
 
         return self.resolver.resolve(uri)
 
-    def load(self, raw, kind=Serials.json):
+    def load(self, raw, kind=Kinds.json):
         """ Schema loader
 
         Loads schema based on kind by performing deserialization on raw bytes of schema
@@ -122,21 +122,21 @@ class JSONSchema:
             tuple: (dict, Serials, Saider) of schema
 
         """
-        if kind == Serials.json:
+        if kind == Kinds.json:
             try:
                 sed = json.loads(raw.decode("utf-8"))
             except Exception as ex:
                 raise DeserializeError("Error deserializing JSON: {} {}"
                                            "".format(raw.decode("utf-8"), ex))
 
-        elif kind == Serials.mgpk:
+        elif kind == Kinds.mgpk:
             try:
                 sed = msgpack.loads(raw)
             except Exception as ex:
                 raise DeserializeError("Error deserializing MGPK: {} {}"
                                            "".format(raw, ex))
 
-        elif kind == Serials.cbor:
+        elif kind == Kinds.cbor:
             try:
                 sed = cbor.loads(raw)
             except Exception as ex:
@@ -158,7 +158,7 @@ class JSONSchema:
         return sed, kind, saider
 
     @staticmethod
-    def dump(sed, kind=Serials.json):
+    def dump(sed, kind=Kinds.json):
         """ Serailize schema based on kind
 
         Parameters:
@@ -266,7 +266,8 @@ class Schemer:
 
     """
 
-    def __init__(self, raw=b'', sed=None, kind=None, typ=JSONSchema(), code=MtrDex.Blake3_256):
+    def __init__(self, raw=b'', sed=None, kind=None, typ=JSONSchema(),
+                       code=MtrDex.Blake3_256, verify=True):
         """  Initialize instance of Schemer
 
         Deserialize if raw provided
@@ -274,14 +275,19 @@ class Schemer:
         When serializing if kind provided then use kind instead of field in sed
 
         Parameters:
-          raw (bytes): of serialized schema
-          sed (dict): dict or None
-            if None its deserialized from raw
-          typ (JSONSchema): type of schema
-          kind (serialization): kind string value or None (see namedtuple coring.Serials)
-            supported kinds are 'json', 'cbor', 'msgpack', 'binary'
-            if kind (None): then its extracted from ked or raw
-          code (MtrDex): default digest code
+            raw (bytes): of serialized schema
+            sed (dict): dict or None
+                  if None its deserialized from raw
+            typ (JSONSchema): type of schema
+            kind (serialization): kind string value or None (see namedtuple coring.Serials)
+                supported kinds are 'json', 'cbor', 'msgpack', 'binary'
+                 if kind (None): then its extracted from ked or raw
+            code (MtrDex): default digest code
+            verify (bool): True means verify said(s) of given raw or sad.
+                           Raises ValidationError if verification fails
+                           False means don't verify. Useful to avoid unnecessary
+                           reverification when deserializing from database
+                           as opposed to over the wire reception.
 
         """
 
@@ -295,7 +301,7 @@ class Schemer:
         else:
             raise ValueError("Improper initialization need raw or sed.")
 
-        if not self._verify_schema():
+        if verify and not self._verify_schema():
             raise ValidationError("invalid kind {} for schema {}"
                                   "".format(self.kind, self.sed))
 

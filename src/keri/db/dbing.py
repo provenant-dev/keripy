@@ -53,21 +53,72 @@ from contextlib import contextmanager
 from typing import Union
 
 import lmdb
-from  ordered_set import OrderedSet as oset
-
-from hio.base import filing
-
+from ordered_set import OrderedSet as oset
 from hio.base import filing
 
 import keri
+from .. import help
+from ..kering import MaxON  # maximum ordinal number for seqence or first seen
 from ..help import helping
+
+logger = help.ogler.getLogger()
 
 ProemSize = 32  # does not include trailing separator
 MaxProem = int("f"*(ProemSize), 16)
-MaxON = int("f"*32, 16)  # largest possible ordinal number, sequence or first seen
-
 SuffixSize = 32  # does not include trailing separator
 MaxSuffix = int("f"*(SuffixSize), 16)
+
+KERILMDBMapSizeKey = "KERI_LMDB_MAP_SIZE"  # fallback
+KERIBaserMapSizeKey = "KERI_BASER_MAP_SIZE"
+KERIRegerMapSizeKey = "KERI_REGER_MAP_SIZE"
+KERIKeeperMapSizeKey = "KERI_KEEPER_MAP_SIZE"
+KERIMailboxerMapSizeKey = "KERI_MAILBOXER_MAP_SIZE"
+KERINoterMapSizeKey = "KERI_NOTER_MAP_SIZE"
+
+def onKey(top, on, *, sep=b'.'):
+    """
+    Returns:
+        onkey (bytes): key formed by joining top key and hex str conversion of
+                       int ordinal number on with sep character.
+
+    Parameters:
+        top (str | bytes): top key prefix to be joined with hex version of on using sep
+        on (int): ordinal number to be converted to 32 hex bytes
+        sep (bytes): separator character for join
+
+    """
+    if hasattr(top, "encode"):
+        top = top.encode("utf-8")  # convert str to bytes
+    return (b'%s%s%032x' % (top, sep, on))
+
+
+def snKey(pre, sn):
+    """
+    Returns:
+        snkey (bytes): key formed by joining pre and hex str conversion of int
+                       sequence ordinal number sn with sep character b".".
+
+    Parameters:
+        pre (str | bytes): key prefix to be joined with hex version of on using
+                           b"." sep
+        sn (int): sequence number to be converted to 32 hex bytes
+    """
+    return onKey(pre, sn, sep=b'.')
+
+
+def fnKey(pre, fn):
+    """
+    Returns:
+        fnkey (bytes): key formed by joining pre and hex str conversion of int
+                       first seen ordinal number fn with sep character b".".
+
+    Parameters:
+        pre (str | bytes): key prefix to be joined with hex version of on using
+                           b"." sep
+        fn (int): first seen ordinal number to be converted to 32 hex bytes
+    """
+    return onKey(pre, fn, sep=b'.')
+
 
 def dgKey(pre, dig):
     """
@@ -80,20 +131,6 @@ def dgKey(pre, dig):
     if hasattr(dig, "encode"):
         dig = dig.encode("utf-8")  # convert str to bytes
     return (b'%s.%s' %  (pre, dig))
-
-
-def onKey(pre, sn, *, sep=b'.'):
-    """
-    Returns bytes DB key from concatenation with '.' of qualified Base64 prefix
-    bytes pre and int ordinal number of event, such as sequence number or first
-    seen order number.
-    """
-    if hasattr(pre, "encode"):
-        pre = pre.encode("utf-8")  # convert str to bytes
-    return (b'%s%s%032x' % (pre, sep, sn))
-
-snKey = onKey  # alias so intent is clear, sn vs fn
-fnKey = onKey  # alias so intent is clear, sn vs fn
 
 
 def dtKey(pre, dts):
@@ -111,7 +148,8 @@ def dtKey(pre, dts):
         dts = dts.encode("utf-8")  # convert str to bytes
     return (b'%s|%s' % (pre, dts))
 
-
+# ToDo right split so key prefix could be top of key space with more than one
+# part
 def splitKey(key, sep=b'.'):
     """
     Returns duple of pre and either dig or on, sn, fn str or dts datetime str by
@@ -131,13 +169,13 @@ def splitKey(key, sep=b'.'):
     else:
         if hasattr(sep, 'encode'):  # make sep match bytes or str
             sep = sep.encode("utf-8")
-    splits = key.split(sep)
+    splits = key.rsplit(sep, 1)
     if len(splits) != 2:
-        raise  ValueError("Unsplittable key = {}".format(key))
+        raise  ValueError(f"Unsplittable {key=} at {sep=}.")
     return tuple(splits)
 
 
-def splitKeyON(key, *, sep=b'.'):
+def splitOnKey(key, *, sep=b'.'):
     """
     Returns list of pre and int on from key
     Accepts either bytes or str key
@@ -149,11 +187,13 @@ def splitKeyON(key, *, sep=b'.'):
     on = int(on, 16)
     return (top, on)
 
-splitSnKey = splitKeyON # alias so intent is clear, sn vs fn; backport of 1.2.x alias
-splitFnKey = splitKeyON # alias so intent is clear, sn vs fn; backport of 1.2.x alias
 
-splitKeySN = splitKeyON  # alias so intent is clear, sn vs fn
-splitKeyFN = splitKeyON  # alias so intent is clear, sn vs fn
+splitSnKey = splitOnKey  # alias so intent is clear, sn vs fn
+splitFnKey = splitOnKey  # alias so intent is clear, sn vs fn
+
+splitKeyON = splitOnKey  # backwards compatible alias
+splitKeySN = splitSnKey  # backwards compatible alias
+splitKeyFN = splitFnKey  # backwards compatible alias
 
 
 def splitKeyDT(key):
@@ -312,7 +352,6 @@ class LMDBer(filing.Filer):
     MaxNamedDBs = 96
     MapSize = 104857600
 
-
     def __init__(self, readonly=False, **kwa):
         """
         Setup main database directory at .dirpath.
@@ -349,11 +388,12 @@ class LMDBer(filing.Filer):
                                 False means open database in read/write mode
 
         """
+
         self.env = None
         self._version = None
         self.readonly = True if readonly else False
-        super(LMDBer, self).__init__(**kwa)
 
+        super(LMDBer, self).__init__(**kwa)
 
     def reopen(self, readonly=False, **kwa):
         """
@@ -387,12 +427,7 @@ class LMDBer(filing.Filer):
 
         # open lmdb major database instance
         # creates files data.mdb and lock.mdb in .dbDirPath
-        map_size = os.getenv("KERI_LMDB_MAP_SIZE", '4294967296')  # 4GB
-        try:
-            map_size = int(map_size)
-        except ValueError:
-            map_size = 4 * 1024**3  # 4GB
-        self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=map_size,
+        self.env = lmdb.open(self.path, max_dbs=self.MaxNamedDBs, map_size=self.MapSize,
                              mode=self.perm, readonly=self.readonly)
 
         self.opened = True if opened and self.env else False
@@ -402,6 +437,34 @@ class LMDBer(filing.Filer):
 
         return self.opened
 
+    @property
+    def version(self):
+        """ Return the version of database stored in __version__ key.
+
+        This value is read through cached in memory
+
+        Returns:
+            str: the version of the database or None if not set in the database
+
+        """
+        if self._version is None:
+            self._version = self.getVer()
+
+        return self._version
+
+    @version.setter
+    def version(self, val):
+        """  Set the version of the database in memory and in the __version__ key
+
+        Parameters:
+            val (str): The new semver formatted version of the database
+
+        """
+        if hasattr(val, "decode"):
+            val = val.decode("utf-8")  # convert bytes to str
+
+        self._version = val
+        self.setVer(self._version)
 
 
     @property
@@ -447,7 +510,7 @@ class LMDBer(filing.Filer):
 
         self.env = None
 
-        return (super(LMDBer, self).close(clear=clear))
+        return super(LMDBer, self).close(clear=clear)
 
     def getVer(self):
         """ Returns the value of the the semver formatted version in the __version__ key in this database
@@ -475,7 +538,6 @@ class LMDBer(filing.Filer):
             cursor = txn.cursor()
             cursor.replace(b'__version__', val)
 
-
     # For subdbs with no duplicate values allowed at each key. (dupsort==False)
     def putVal(self, db, key, val):
         """
@@ -501,7 +563,9 @@ class LMDBer(filing.Filer):
         """
         Write serialized bytes val to location key in db
         Overwrites existing val if any
-        Returns True If val successfully written Else False
+        Returns:
+            result (bool): True If val successfully written
+                           False otherwise
 
         Parameters:
             db is opened named sub db with dupsort=False
@@ -566,41 +630,9 @@ class LMDBer(filing.Filer):
             return count
 
 
-    def getAllItemIter(self, db, key=b'', split=True, sep=b'.'):
+    def getTopItemIter(self, db, top=b''):
         """
-        Returns iterator of item duple (key, val), at each key over all
-        keys in db. If split is true then the key is split at sep and instead
-        of returing duple it results tuple with one entry for each key split
-        as well as the value.
-
-        Works for both dupsort==False and dupsort==True
-
-        Raises StopIteration Error when empty.
-
-        Parameters:
-            db is opened named sub db with dupsort=False
-            key is key location in db to resume replay,
-                   If empty then start at first key in database
-            split (bool): True means split key at sep before returning
-            sep (bytes): separator char for key
-        """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            if not cursor.set_range(key):  #  moves to val at key >= key, first if empty
-                return  # no values end of db
-
-            for key, val in cursor.iternext():  # return key, val at cursor
-                if split:
-                    splits = bytes(key).split(sep)
-                    splits.append(val)
-                else:
-                    splits = (bytes(key), val)
-                yield tuple(splits)
-
-
-    def getTopItemIter(self, db, key=b''):
-        """
-        Iterates over branch of db given by key
+        Iterates over branch of db given by top key
 
         Returns:
             items (abc.Iterator): iterator of (full key, val) tuples over a
@@ -615,22 +647,24 @@ class LMDBer(filing.Filer):
 
         Parameters:
             db (lmdb._Database): instance of named sub db with dupsort==False
-            key (bytes): truncated top key, a key space prefix to get all the items
+            top (bytes): truncated top key, a key space prefix to get all the items
                         from multiple branches of the key space. If top key is
-                        empty then gets all items in database
+                        empty then gets all items in database.
+                        In Python str.startswith('') always returns True so if branch
+                        key is empty string it matches all keys in db with startswith.
         """
         with self.env.begin(db=db, write=False, buffers=True) as txn:
             cursor = txn.cursor()
-            if cursor.set_range(key):  # move to val at key >= key if any
+            if cursor.set_range(top):  # move to val at key >= key if any
                 for ckey, cval in cursor.iternext():  # get key, val at cursor
                     ckey = bytes(ckey)
-                    if not ckey.startswith(key): #  prev entry if any last in branch
+                    if not ckey.startswith(top): #  prev entry if any last in branch
                         break  # done
                     yield (ckey, cval)  # another entry in branch startswith key
             return  # done raises StopIteration
 
 
-    def delTopVal(self, db, key=b''):
+    def delTopVal(self, db, top=b''):
         """
         Deletes all values in branch of db given top key.
 
@@ -640,9 +674,9 @@ class LMDBer(filing.Filer):
 
         Parameters:
             db (lmdb._Database): instance of named sub db with dupsort==False
-            key (bytes): truncated top key, a key space prefix to get all the items
+            top (bytes): truncated top key, a key space prefix to get all the items
                         from multiple branches of the key space. If top key is
-                        empty then gets all items in database
+                        empty then deletes all items in database
 
         Works for both dupsort==False and dupsort==True
         Because cursor.iternext() advances cursor after returning item its safe
@@ -656,11 +690,11 @@ class LMDBer(filing.Filer):
         with self.env.begin(db=db, write=True, buffers=True) as txn:
             result = False
             cursor = txn.cursor()
-            if cursor.set_range(key):  # move to val at key >= key if any
+            if cursor.set_range(top):  # move to val at key >= key if any
                 ckey, cval = cursor.item()
                 while ckey:  # end of database key == b''
                     ckey = bytes(ckey)
-                    if not ckey.startswith(key): #  prev entry if any last in branch
+                    if not ckey.startswith(top): #  prev entry if any last in branch
                         break  # done
                     result = cursor.delete() or result # delete moves cursor to next item
                     ckey, cval = cursor.item()  # cursor now at next item after deleted
@@ -732,112 +766,290 @@ class LMDBer(filing.Filer):
                     break
                 yield (ckey, cn, cval)
 
-    # For subdbs with no duplicate values allowed at each key. (dupsort==False)
-    # and use keys with ordinal as monotonically increasing number part
-    # such as sn or fn
-    def appendOrdValPre(self, db, pre, val):
-        """
-        Appends val in order after last previous key with same pre in db.
-        Returns ordinal number in, on, of appended entry. Appended on is 1 greater
-        than previous latest on.
-        Uses onKey(pre, on) for entries.
+    # For subdbs  the use keys with trailing part the is  monotonically
+    # ordinal number serialized as 32 hex bytes
 
-        Append val to end of db entries with same pre but with on incremented by
-        1 relative to last preexisting entry at pre.
+    # used in OnSuberBase
+    def putOnVal(self, db, key,  on=0, val=b'', *, sep=b'.'):
+        """Write serialized bytes val to location at onkey consisting of
+        key + sep + serialized on in db.
+        Does not overwrite.
+
+        Returns:
+            result (bool): True if successful write i.e onkey not already in db
+                           False otherwise
 
         Parameters:
-            db is opened named sub db with dupsort=False
-            pre is bytes identifier prefix for event
-            val is event digest
+            db (lmdbsubdb): named sub db of lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            on (int): ordinal number at which write
+            val (bytes): to be written at onkey
+            sep (bytes): separator character for split
+        """
+        with self.env.begin(db=db, write=True, buffers=True) as txn:
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:
+                onkey = key
+            try:
+                return (txn.put(onkey, val, overwrite=False))
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{onkey}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+
+    # used in OnSuberBase
+    def setOnVal(self, db, key, on=0, val=b'',  *, sep=b'.'):
+        """
+        Write serialized bytes val to location at onkey consisting of
+        key + sep + serialized on in db.
+        Overwrites pre-existing value at onkey if any.
+
+        Returns:
+            result (bool): True if successful write i.e onkey not already in db
+                           False otherwise
+
+        Parameters:
+            db (lmdbsubdb): named sub db of lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            on (int): ordinal number at which write
+            val (bytes): to be written at onkey
+            sep (bytes): separator character for split
+        """
+        with self.env.begin(db=db, write=True, buffers=True) as txn:
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:
+                onkey = key
+            try:
+                return (txn.put(onkey, val))
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{onkey}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+
+
+    # used in OnSuberBase
+    def appendOnVal(self, db, key, val, *, sep=b'.'):
+        """
+        Appends val in order after last previous onkey in db where
+        onkey has same given key prefix but with different serialized on suffix
+        attached with sep.
+        Returns ordinal number on, of appended entry. Appended on is 1 greater
+        than previous latest on at key.
+        Uses onKey(key, on) for entries.
+
+        Works with either dupsort==True or False since always creates new full
+        key.
+
+        Append val to end of db entries with same key but with on incremented by
+        1 relative to last preexisting entry at key.
+
+        Returns:
+            on (int): ordinal number of newly appended val
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            val (bytes): serialized value to append
+            sep (bytes): separator character for split
         """
         # set key with fn at max and then walk backwards to find last entry at pre
         # if any otherwise zeroth entry at pre
-        key = onKey(pre, MaxON)
+        onkey = onKey(key, MaxON, sep=sep)
         with self.env.begin(db=db, write=True, buffers=True) as txn:
             on = 0  # unless other cases match then zeroth entry at pre
             cursor = txn.cursor()
-            if not cursor.set_range(key):  # max is past end of database
+            if not cursor.set_range(onkey):  # max is past end of database
                 #  so either empty database or last is earlier pre or
                 #  last is last entry  at same pre
                 if cursor.last():  # not empty db. last entry earlier than max
-                    ckey = cursor.key()
-                    cpre, cn = splitKeyON(ckey)
-                    if cpre == pre:  # last is last entry for same pre
+                    onkey = cursor.key()
+                    ckey, cn = splitOnKey(onkey, sep=sep)
+                    if ckey == key:  # last is last entry for same pre
                         on = cn + 1  # increment
             else:  # not past end so not empty either later pre or max entry at pre
-                ckey = cursor.key()
-                cpre, cn = splitKeyON(ckey)
-                if cpre == pre:  # last entry for pre is already at max
-                    raise ValueError("Number part of key {}  exceeds maximum"
-                                     " size.".format(ckey))
+                onkey = cursor.key()
+                ckey, cn = splitOnKey(onkey, sep=sep)
+                if ckey == key:  # last entry for pre is already at max
+                    raise ValueError(f"Number part {cn=} for key part {ckey=}"
+                                     f"exceeds maximum size.")
                 else:  # later pre so backup one entry
                     # either no entry before last or earlier pre with entry
                     if cursor.prev():  # prev entry, maybe same or earlier pre
-                        ckey = cursor.key()
-                        cpre, cn = splitKeyON(ckey)
-                        if cpre == pre:  # last entry at pre
+                        onkey = cursor.key()
+                        ckey, cn = splitOnKey(onkey, sep=sep)
+                        if ckey == key:  # last entry at pre
                             on = cn + 1  # increment
 
-            key = onKey(pre, on)
+            onkey = onKey(key, on, sep=sep)
 
-            if not cursor.put(key, val, overwrite=False):
-                raise  ValueError("Failed appending {} at {}.".format(val, key))
+            if not cursor.put(onkey, val, overwrite=False):
+                raise  ValueError(f"Failed appending {val=} at {key=}.")
             return on
 
 
-    def getAllOrdItemPreIter(self, db, pre, on=0):
-        """
-        Returns iterator of duple item, (on, dig), at each key over all ordinal
-        numbered keys with same prefix, pre, in db. Values are sorted by
-        onKey(pre, on) where on is ordinal number int.
-        Returned items are duples of (on, dig) where on is ordinal number int
-        and dig is event digest for lookup in .evts sub db.
+    # used in OnSuberBase
+    def getOnVal(self, db, key, on=0, *, sep=b'.'):
+        """Gets value at onkey consisting of key + sep + serialized on in db.
 
-        Raises StopIteration Error when empty.
+        Returns:
+            val (bytes | memoryview):  entry at onkey consisting of key + sep +
+                                       serialized on in db.
+                                      None if no entry at key
 
         Parameters:
-            db is opened named sub db with dupsort=False
-            pre is bytes of itdentifier prefix
-            on is int ordinal number to resume replay
+            db (lmdbsubdb): named sub db of lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            on (int): ordinal number at which to retrieve
+            sep (bytes): separator character for split
+
+        """
+        with self.env.begin(db=db, write=False, buffers=True) as txn:
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:
+                onkey = key
+            try:
+                return(txn.get(onkey))
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{onkey}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+
+
+    # used in OnSuberBase
+    def delOnVal(self, db, key, on=0, *, sep=b'.'):
+        """
+        Deletes value at onkey consisting of key + sep + serialized on in db.
+        Returns True If key exists in database Else False
+
+        Parameters:
+            db (lmdbsubdb): named sub db of lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            on (int): ordinal number at which to delete
+            sep (bytes): separator character for split
+        """
+        with self.env.begin(db=db, write=True, buffers=True) as txn:
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:
+                onkey = key
+            try:
+                return (txn.delete(onkey))  # when empty deletes whole db
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+
+    # used in OnSuberBase
+    def cntOnVals(self, db, key=b'', on=0, *, sep=b'.'):
+        """
+        Returns (int): count of of all ordinal keyed vals with key
+        but different on tail in db starting at ordinal number on of key.
+        Full key is composed of top+sep+
+        When dupsort==true then duplicates are included in count since .iternext
+        includes duplicates.
+        when key is empty then counts whole db
+
+        Parameters:
+            db (lmdbsubdb): named sub db of lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                         when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate count
+            sep (bytes): separator character for split
         """
         with self.env.begin(db=db, write=False, buffers=True) as txn:
             cursor = txn.cursor()
-            key = onKey(pre, on)  # start replay at this enty 0 is earliest
-            if not cursor.set_range(key):  #  moves to val at key >= key
-                return  # no values end of db
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:
+                onkey = key
+            count = 0
+            if not cursor.set_range(onkey):  #  moves to val at key >= key
+                return count  # no values end of db
 
-            for key, val in cursor.iternext():  # get key, val at cursor
-                cpre, cn = splitKeyON(key)
-                if cpre != pre:  # prev is now the last event for pre
+            for ckey in cursor.iternext(values=False):  # get key only at cursor
+                try:
+                    ckey, cn = splitOnKey(ckey, sep=sep)
+                except ValueError as ex:  # not splittable key
+                    break
+
+                if key and ckey != key:  # prev is now the last event for pre
                     break  # done
-                yield (cn, val)  # (on, dig) of event
+                count = count+1
 
+            return count
 
-    def getAllOrdItemAllPreIter(self, db, key=b''):
+    # used in OnSuberBase
+    def getOnValIter(self, db, key=b'', on=0, *, sep=b'.'):
         """
-        Returns iterator of triple item, (pre, on, dig), at each key over all
-        ordinal numbered keys for all prefixes in db. Values are sorted by
-        onKey(pre, on) where on is ordinal number int.
-        Each returned item is triple (pre, on, dig) where pre is identifier prefix,
-        on is ordinal number int and dig is event digest for lookup in .evts sub db.
+        Returns iterator of the val at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Returned items are triples of (key, on, val)
+        When dupsort==true then duplicates are included in items since .iternext
+        includes duplicates.
+        when key is empty then retrieves whole db
 
         Raises StopIteration Error when empty.
 
+        Returns:
+            items (Iterator[bytes]): val with same
+                key but increments of on beginning with on
+
         Parameters:
-            db is opened named sub db with dupsort=False
-            key is key location in db to resume replay,
-                   If empty then start at first key in database
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        for (key, on, val) in self.getOnItemIter(db=db, key=key, on=on, sep=sep):
+            yield (val)
+
+    # used in OnSuberBase
+    def getOnItemIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """
+        Returns iterator of triples (key, on, val), at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Returned items are triples of (key, on, val)
+        When dupsort==true then duplicates are included in items since .iternext
+        includes duplicates.
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val with same
+                key but increments of on beginning with on
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
         """
         with self.env.begin(db=db, write=False, buffers=True) as txn:
             cursor = txn.cursor()
-            if not cursor.set_range(key):  #  moves to val at key >= key, first if empty
-                return  # no values end of db
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:  # empty
+                onkey = key
+            if not cursor.set_range(onkey):  #  moves to val at key >= onkey
+                return  # no values end of db raises StopIteration
 
-            for key, val in cursor.iternext():  # return key, val at cursor
-                cpre, cn = splitKeyON(key)
-                yield (cpre, cn, val)  # (pre, on, dig) of event
+            for ckey, cval in cursor.iternext():  # get key, val at cursor
+                ckey, cn = splitOnKey(ckey, sep=sep)
+                if key and not ckey == key:
+                    break
+                yield (ckey, cn, cval)
+
+    # ToDo
+    # getOnItemBackIter symmetric with getOnItemIter
+    # getOnValBackIter symmetric with getOnValIter
 
 
+    # IoSet insertion order in val so can have effective dups but with
+    # dupsort==False so val not limited to 511 bytes
     # For databases that support set of insertion ordered values with apparent
     # effective duplicate key but with (dupsort==False). Actual key uses hidden
     # key suffix ordinal to provide insertion ordering of value members of set
@@ -860,7 +1072,7 @@ class LMDBer(filing.Filer):
         Parameters:
             db (lmdb._Database): instance of named sub db with dupsort==False
             key (bytes): Apparent effective key
-            vals (abc.Iterable): serialized values to add to set of vals at key
+            vals (Iterable): serialized values to add to set of vals at key
 
         """
         result = False
@@ -891,8 +1103,8 @@ class LMDBer(filing.Filer):
 
     def addIoSetVal(self, db, key, val, *, sep=b'.'):
         """
-        Add val to insertion ordered set of values all with the same apparent
-        effective key if val not already in set of vals at key.
+        Add val idempotently to insertion ordered set of values all with the
+        same apparent effective key if val not already in set of vals at key. A
         Uses hidden ordinal key suffix for insertion ordering.
         The suffix is appended and stripped transparently.
 
@@ -950,58 +1162,6 @@ class LMDBer(filing.Filer):
                 result = txn.put(iokey, val, dupdata=False, overwrite=True) or result
             return result
 
-
-    def appendIoSetVal(self, db, key, val, *, sep=b'.'):
-        """
-        Append val to insertion ordered set of values all with the same apparent
-        effective key. Assumes val is not already in set.
-        Uses hidden ordinal key suffix for insertion ordering.
-        The suffix is appended and stripped transparently.
-
-        Returns:
-           ion (int): hidden insertion ordering ordinal of appended val
-
-        Parameters:
-            db (lmdb._Database): instance of named sub db with dupsort==False
-            key (bytes): Apparent effective key
-            val (bytes): value to append
-        """
-        ion = 0  # default is zeroth insertion at key
-        iokey = suffix(key, ion=MaxSuffix, sep=sep)  # make iokey at max and walk back
-        with self.env.begin(db=db, write=True, buffers=True) as txn:
-            cursor = txn.cursor()  # create cursor to walk back
-            if not cursor.set_range(iokey):  # max is past end of database
-                # Three possibilities for max past end of database
-                # 1. last entry in db is for same key
-                # 2. last entry in db is for other key before key
-                # 3. database is empty
-                if cursor.last():  # not 3. empty db, so either 1. or 2.
-                    ckey, cion = unsuffix(cursor.key(), sep=sep)
-                    if ckey == key:  # 1. last is last entry for same key
-                        ion = cion + 1  # so set ion to the increment of cion
-            else:  # max is not past end of database
-                # Two possibilities for max not past end of databseso
-                # 1. cursor at max entry at key
-                # 2. other key after key with entry in database
-                ckey, cion = unsuffix(cursor.key(), sep=sep)
-                if ckey == key:  # 1. last entry for key is already at max
-                    raise ValueError("Number part of key {} at maximum"
-                                     " size.".format(ckey))
-                else:  # 2. other key after key so backup one entry
-                    # Two possibilities: 1. no prior entry 2. prior entry
-                    if cursor.prev():  # prev entry, maybe same or earlier pre
-                        # 2. prior entry with two possiblities:
-                        # 1. same key
-                        # 2. other key before key
-                        ckey, cion = unsuffix(cursor.key(), sep=sep)
-                        if ckey == key:  # prior (last) entry at key
-                            ion = cion + 1  # so set ion to the increment of cion
-
-            iokey = suffix(key, ion=ion, sep=sep)
-            if not cursor.put(iokey, val, overwrite=False):
-                raise  ValueError("Failed appending {} at {}.".format(val, key))
-
-            return ion
 
 
     def getIoSetVals(self, db, key, *, ion=0, sep=b'.'):
@@ -1196,77 +1356,29 @@ class LMDBer(filing.Filer):
             return False
 
 
-    def getIoSetItems(self, db, key, *, ion=0, sep=b'.'):
+    def getTopIoSetItemIter(self, db, top=b'', *, sep=b'.'):
         """
         Returns:
-            items (list): list of tuples (iokey, val) of entries in set of with
-                same apparent effective key. iokey includes the ordinal key suffix
-            Uses hidden ordinal key suffix for insertion ordering.
+            items (Iterator[(key,val)]): iterator of tuples (key, val) where
+            key is apparent key with hidden insertion ordering suffixe removed
+            from effective key.
+            Iterates over top branch of insertion ordered set values where each
+            effective key has trailing hidden suffix of serialization of insertion
+            ordering ordinal.
 
-        Parameters:
-            db (lmdb._Database): instance of named sub db with dupsort==False
-            key (bytes): Apparent effective key
-            ion (int): starting ordinal value, default 0
-
-        """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            items = []
-            iokey = suffix(key, ion, sep=sep)  # start ion th value for key zeroth default
-            cursor = txn.cursor()
-            if cursor.set_range(iokey):  # move to val at key >= iokey if any
-                for iokey, val in cursor.iternext():  # get iokey, val at cursor
-                    ckey, cion = unsuffix(iokey, sep=sep)
-                    if ckey != key:  # prev entry if any was the last entry for key
-                        break  # done
-                    items.append((iokey, val))  # another entry at key
-            return items
-
-
-    def getIoSetItemsIter(self, db, key, *, ion=0, sep=b'.'):
-        """
-        Returns:
-            items (abc.Iterator): iterator over insertion ordered set of values
-            at same apparent effective key where each iteration returns tuple
-            (iokey, val). iokey includes the ordinal key suffix.
             Uses hidden ordinal key suffix for insertion ordering.
 
         Raises StopIteration Error when empty.
 
         Parameters:
             db (lmdb._Database): instance of named sub db with dupsort==False
-            key (bytes): Apparent effective key
-            ion (int): starting ordinal value, default 0
+            top (bytes): top key in db. When top is empty then every item in db.
+            sep (bytes): sep character for attached io suffix
         """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            iokey = suffix(key, ion, sep=sep)  # start ion th value for key zeroth default
-            cursor = txn.cursor()
-            if cursor.set_range(iokey):  # move to val at key >= iokey if any
-                for iokey, val in cursor.iternext():  # get key, val at cursor
-                    ckey, cion = unsuffix(iokey, sep=sep)
-                    if ckey != key: #  prev entry if any was the last entry for key
-                        break  # done
-                    yield (iokey, val)  # another entry at key
-            return  # done raises StopIteration
+        for iokey, val in self.getTopItemIter(db=db, top=top):
+            key, ion = splitOnKey(iokey, sep=sep)
+            yield (key, val)
 
-
-    def delIoSetIokey(self, db, iokey):
-        """
-        Deletes val at at actual iokey that includes ordinal key suffix.
-
-        Returns:
-            result (bool): True if val was deleted at iokey. False otherwise
-                if no val at iokey
-
-        Parameters:
-            db (lmdb._Database): instance of named sub db with dupsort==False
-            iokey (bytes): actual key with ordinal key suffix
-        """
-        with self.env.begin(db=db, write=True, buffers=True) as txn:
-            try:
-                return txn.delete(iokey)
-            except lmdb.BadValsizeError as ex:
-                raise KeyError(f"Key: `{iokey}` is either empty, too big (for lmdb),"
-                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
 
 
     # For subdbs that support duplicates at each key (dupsort==True)
@@ -1419,31 +1531,6 @@ class LMDBer(filing.Filer):
             return count
 
 
-    def cntValsAllPre(self, db, pre, on=0):
-        """
-        Returns (int): count of of all vals with same pre in key but different
-            on in key in db starting at ordinal number on of pre
-
-        Does not count dups
-
-        Parameters:
-            db is opened named sub db
-            pre is bytes of key within sub db's keyspace pre.on
-        """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            key = onKey(pre, on)  # start replay at this enty 0 is earliest
-            count = 0
-            if not cursor.set_range(key):  #  moves to val at key >= key
-                return count  # no values end of db
-
-            for val in cursor.iternext(values=False):  # get key, val at cursor
-                cpre, cn = splitKeyON(val)
-                if cpre != pre:  # prev is now the last event for pre
-                    break  # done
-                count = count+1
-
-            return count
 
 
     def delVals(self, db, key, val=b''):
@@ -1466,8 +1553,10 @@ class LMDBer(filing.Filer):
 
 
     # For subdbs that support insertion order preserving duplicates at each key.
-    # dupsort==True and prepends and strips io val proem
-    def putIoVals(self, db, key, vals):
+    # IoDup class IoVals IoItems
+    # dupsort==True and prepends and strips io val proem to each value.
+    # because dupsort==True values are limited to 511 bytes including proem
+    def putIoDupVals(self, db, key, vals):
         """
         Write each entry from list of bytes vals to key in db in insertion order
         Adds to existing values at key if any
@@ -1476,11 +1565,13 @@ class LMDBer(filing.Filer):
 
         Duplicates at a given key preserve insertion order of duplicate.
         Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
+        all values that makes lexocographic order that same as insertion order.
+
         Duplicates are ordered as a pair of key plus value so prepending proem
         to each value changes duplicate ordering. Proem is 33 characters long.
         With 32 character hex string followed by '.' for essentiall unlimited
         number of values which will be limited by memory.
+
         With prepended proem ordinal must explicity check for duplicate values
         before insertion. Uses a python set for the duplicate inclusion test.
         Set inclusion scales with O(1) whereas list inclusion scales with O(n).
@@ -1492,7 +1583,7 @@ class LMDBer(filing.Filer):
         """
 
         result = False
-        dups = set(self.getIoVals(db, key))  #get preexisting dups if any
+        dups = set(self.getIoDupVals(db, key))  #get preexisting dups if any
         with self.env.begin(db=db, write=True, buffers=True) as txn:
             idx = 0
             cursor = txn.cursor()
@@ -1513,7 +1604,7 @@ class LMDBer(filing.Filer):
         return result
 
 
-    def addIoVal(self, db, key, val):
+    def addIoDupVal(self, db, key, val):
         """
         Add val bytes as dup in insertion order to key in db
         Adds to existing values at key if any
@@ -1521,32 +1612,47 @@ class LMDBer(filing.Filer):
         Actual value written include prepended proem ordinal
         Assumes DB opened with dupsort=True
 
+        Duplicates at a given key preserve insertion order of duplicate.
         Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
 
         Parameters:
             db is opened named sub db with dupsort=False
             key is bytes of key within sub db's keyspace
             val is bytes of value to be written
         """
-        return self.putIoVals(db, key, [val])
+        return self.putIoDupVals(db, key, [val])
 
 
-    def getIoVals(self, db, key):
+    def getIoDupVals(self, db, key):
         """
         Return list of duplicate values at key in db in insertion order
         Returns empty list if no entry at key
         Removes prepended proem ordinal from each val  before returning
         Assumes DB opened with dupsort=True
 
+        Duplicates at a given key preserve insertion order of duplicate.
         Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
+
 
         Parameters:
             db is opened named sub db with dupsort=True
@@ -1566,18 +1672,26 @@ class LMDBer(filing.Filer):
                                " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
 
 
-    def getIoValsIter(self, db, key):
+    def getIoDupValsIter(self, db, key):
         """
         Return iterator of all duplicate values at key in db in insertion order
         Raises StopIteration Error when no remaining dup items = empty.
         Removes prepended proem ordinal from each val before returning
         Assumes DB opened with dupsort=True
 
+        Duplicates at a given key preserve insertion order of duplicate.
         Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
+
 
         Parameters:
             db is opened named sub db with dupsort=True
@@ -1596,12 +1710,25 @@ class LMDBer(filing.Filer):
                                " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
 
 
-    def getIoValLast(self, db, key):
+    def getIoDupValLast(self, db, key):
         """
         Return last added dup value at key in db in insertion order
         Returns None no entry at key
         Removes prepended proem ordinal from val before returning
         Assumes DB opened with dupsort=True
+
+        Duplicates at a given key preserve insertion order of duplicate.
+        Because lmdb is lexocographic an insertion ordering proem is prepended to
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
 
         Parameters:
             db is opened named sub db with dupsort=True
@@ -1621,76 +1748,95 @@ class LMDBer(filing.Filer):
                                " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
 
 
-    def getIoItemsNext(self, db, key=b"", skip=True):
+    def delIoDupVals(self, db, key):
         """
-        Return list of all dup items at next key after key in db in insertion order.
-        Item is (key, val) with proem stripped from val stored in db.
-        If key == b'' then returns list of dup items at first key in db.
-        If skip is False and key is not empty then returns dup items at key
-        Returns empty list if no entries at next key after key
+        Deletes all values at key in db if key present.
+        Returns True If key exists
 
-        If key is empty then gets io items (key, io value) at first key in db
-        Use the return key from items as next key for next call to function in
-        order to iterate through the database
+        Duplicates at a given key preserve insertion order of duplicate.
+        Because lmdb is lexocographic an insertion ordering proem is prepended to
+        all values that makes lexocographic order that same as insertion order.
 
-        Assumes DB opened with dupsort=True
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
 
         Parameters:
             db is opened named sub db with dupsort=True
-            key is bytes of key within sub db's keyspace or empty string
-            skip is Boolean If True skips to next key if key is not empty string
-                    Othewise don't skip for first pass
+            key is bytes of key within sub db's keyspace
         """
 
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            items = []
-            if cursor.set_range(key):  # moves to first_dup at key
-                found = True
-                if skip and key and cursor.key() == key:  # skip to next key
-                    found = cursor.next_nodup()  # skip to next key not dup if any
-                if found:
-                    # slice off prepended ordering prefix on value in item
-                    items = [(key, val[33:]) for key, val in cursor.iternext_dup(keys=True)]
-            return items
+        with self.env.begin(db=db, write=True, buffers=True) as txn:
+            try:
+                return (txn.delete(key))
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
 
 
-    def getIoItemsNextIter(self, db, key=b"", skip=True):
+    def delIoDupVal(self, db, key, val):
         """
-        Return iterator of all dup items at next key after key in db in insertion order.
-        Item is (key, val) with proem stripped from val stored in db.
-        If key = b'' then returns list of dup items at first key in db.
-        If skip is False and key is not empty then returns dup items at key
-        Raises StopIteration Error when no remaining dup items = empty.
-
-        If key is empty then gets io items (key, io value) at first key in db
-        Use the return key from items as next key for next call to function in
-        order to iterate through the database
-
+        Deletes dup io val at key in db. Performs strip search to find match.
+        Strips proems and then searches.
+        Returns True if delete else False if val not present
         Assumes DB opened with dupsort=True
 
+        Duplicates at a given key preserve insertion order of duplicate.
+        Because lmdb is lexocographic an insertion ordering proem is prepended to
+        all values that makes lexocographic order that same as insertion order
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentially unlimited
+        number of values which will be limited by memory.
+
+        Does a linear search so not very efficient when not deleting from the front.
+        This is hack for supporting escrow which needs to delete individual dup.
+        The problem is that escrow is not fixed buts stuffs gets added and
+        deleted which just adds to the value of the proem. 2**16 is an impossibly
+        large number so the proem will not max out practically. But its not
+        an elegant solution.
+
         Parameters:
-            db is opened named sub db with dupsort=True
-            key is bytes of key within sub db's keyspace or empty
-            skip is Boolean If True skips to next key if key is not empty string
-                    Othewise don't skip for first pass
+            db is opened named sub db with dupsort=False
+            key is bytes of key within sub db's keyspace
+            val is bytes of value to be deleted without intersion ordering proem
         """
 
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
+        with self.env.begin(db=db, write=True, buffers=True) as txn:
             cursor = txn.cursor()
-            if cursor.set_range(key):  # moves to first_dup at key
-                found = True
-                if skip and key and cursor.key() == key:  # skip to next key
-                    found = cursor.next_nodup()  # skip to next key not dup if any
-                if found:
-                    for key, val in cursor.iternext_dup(keys=True):
-                        yield (key, val[33:]) # slice off prepended ordering prefix
+            try:
+                if cursor.set_key(key):  # move to first_dup
+                    for proval in cursor.iternext_dup():  #  value with proem
+                        if val == proval[33:]:  #  strip of proem
+                            return cursor.delete()
+            except lmdb.BadValsizeError as ex:
+                raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
+                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+        return False
 
 
-    def cntIoVals(self, db, key):
+    def cntIoDupVals(self, db, key):
         """
         Return count of dup values at key in db, or zero otherwise
         Assumes DB opened with dupsort=True
+
+        Duplicates at a given key preserve insertion order of duplicate.
+        Because lmdb is lexocographic an insertion ordering proem is prepended to
+        all values that makes lexocographic order that same as insertion order.
+
+        Duplicates are ordered as a pair of key plus value so prepending proem
+        to each value changes duplicate ordering. Proem is 33 characters long.
+        With 32 character hex string followed by '.' for essentiall unlimited
+        number of values which will be limited by memory.
+
+        With prepended proem ordinal must explicity check for duplicate values
+        before insertion. Uses a python set for the duplicate inclusion test.
+        Set inclusion scales with O(1) whereas list inclusion scales with O(n).
 
         Parameters:
             db is opened named sub db with dupsort=True
@@ -1708,6 +1854,8 @@ class LMDBer(filing.Filer):
                                " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
             return count
 
+
+# used in IoDupSuber.getItemIter
     def getTopIoDupItemIter(self, db, top=b''):
         """
         Iterates over top branch of db given by key of IoDup items where each value
@@ -1749,218 +1897,340 @@ class LMDBer(filing.Filer):
         before insertion. Uses a python set for the duplicate inclusion test.
         Set inclusion scales with O(1) whereas list inclusion scales with O(n).
         """
-        for top, val in self.getTopItemIter(db=db, key=top):
+        for top, val in self.getTopItemIter(db=db, top=top):
             val = val[33:] # strip proem
             yield (top, val)
 
 
-    def delIoVals(self, db, key):
+    # methods for OnIoDup that combines IoDup value proem with On ordinal numbered
+    # trailing prefix
+    # this is so we do the proem add and strip here not in some higher level class
+    # like suber
+
+    def addOnIoDupVal(self, db, key, on=0, val=b'', sep=b'.'):
         """
-        Deletes all values at key in db if key present.
-        Returns True If key exists
+        Add val bytes as dup at onkey consisting of key + sep + serialized on in db.
+        Adds to existing values at key if any
+        Returns True if written else False if dup val already exists
+
+        Duplicates are inserted in lexocographic order not insertion order.
+        Lmdb does not insert a duplicate unless it is a unique value for that
+        key.
+
+        Does inclusion test to dectect of duplicate already exists
+        Uses a python set for the duplicate inclusion test. Set inclusion scales
+        with O(1) whereas list inclusion scales with O(n).
+
+        Returns:
+           result (bool): True if duplicate val added at onkey idempotent
+                          False if duplicate val preexists at onkey
 
         Parameters:
             db is opened named sub db with dupsort=True
-            key is bytes of key within sub db's keyspace
+            key (bytes): key within sub db's keyspace plus trailing part on
+            val (bytes): serialized value to add at onkey as dup
+            sep (bytes): separator character for split
         """
-
-        with self.env.begin(db=db, write=True, buffers=True) as txn:
-            try:
-                return (txn.delete(key))
-            except lmdb.BadValsizeError as ex:
-                raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
-                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
+        onkey = onKey(key, on, sep=sep)
+        return (self.addIoDupVal(db, key=onkey, val=val))
 
 
-    def delIoVal(self, db, key, val):
+    # used in OnIoDupSuber
+    def appendOnIoDupVal(self, db, key, val, *, sep=b'.'):
         """
-        Deletes dup io val at key in db. Performs strip search to find match.
-        Strips proems and then searches.
-        Returns True if delete else False if val not present
+        Appends val in order after last previous key with same pre in db where
+        full key has key prefix and serialized on suffix attached with sep and
+        value has ordinal proem prefixed.
+        Returns ordinal number in, on, of appended entry. Appended on is 1 greater
+        than previous latest on at pre.
+        Uses onKey(pre, on) for entries.
+
+        Works with either dupsort==True or False since always creates new full
+        key.
+
+        Append val to end of db entries with same pre but with on incremented by
+        1 relative to last preexisting entry at pre.
+
+        Returns:
+            on (int): ordinal number of newly appended val
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+            val (bytes): serialized value to append
+            sep (bytes): separator character for split
+        """
+        val = (b'%032x.' % (0)) +  val  # prepend ordering proem
+        return (self.appendOnVal(db=db, key=key, val=val, sep=sep))
+
+
+    def delOnIoDupVals(self, db, key, on=0, sep=b'.'):
+        """Deletes all dup iovals at onkey consisting of key + sep + serialized
+        on in db.
+
         Assumes DB opened with dupsort=True
 
-        Duplicates at a given key preserve insertion order of duplicate.
-        Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending proem
-        to each value changes duplicate ordering. Proem is 33 characters long.
-        With 32 character hex string followed by '.' for essentially unlimited
-        number of values which will be limited by memory.
+        Duplicates are inserted in lexocographic order not insertion order.
+        Lmdb does not insert a duplicate unless it is a unique value for that
+        key.
 
-        Does a linear search so not very efficient when not deleting from the front.
-        This is hack for supporting escrow which needs to delete individual dup.
-        The problem is that escrow is not fixed buts stuffs gets added and
-        deleted which just adds to the value of the proem. 2**16 is an impossibly
-        large number so the proem will not max out practically. But its not
-        and elegant solution. So maybe escrows need to use a different approach.
-        But really didn't want to add another database just for escrows.
+        Does inclusion test to dectect of duplicate already exists
+        Uses a python set for the duplicate inclusion test. Set inclusion scales
+        with O(1) whereas list inclusion scales with O(n).
 
-        Parameters:
-            db is opened named sub db with dupsort=False
-            key is bytes of key within sub db's keyspace
-            val is bytes of value to be deleted without intersion ordering proem
-        """
-
-        with self.env.begin(db=db, write=True, buffers=True) as txn:
-            cursor = txn.cursor()
-            try:
-                if cursor.set_key(key):  # move to first_dup
-                    for proval in cursor.iternext_dup():  #  value with proem
-                        if val == proval[33:]:  #  strip of proem
-                            return cursor.delete()
-            except lmdb.BadValsizeError as ex:
-                raise KeyError(f"Key: `{key}` is either empty, too big (for lmdb),"
-                               " or wrong DUPFIXED size. ref) lmdb.BadValsizeError")
-        return False
-
-
-    def getIoValsAllPreIter(self, db, pre, on=0):
-        """
-        Returns iterator of all dup vals in insertion order for all entries
-        with same prefix across all ordinal numbers in increasing order
-        without gaps between ordinal numbers
-        starting with on, default 0. Stops if gap or different pre.
-        Assumes that key is combination of prefix and sequence number given
-        by .snKey().
-        Removes prepended proem ordinal from each val before returning
-
-        Raises StopIteration Error when empty.
-
-        Duplicates are retrieved in insertion order.
-
-        Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        Returns:
+           result (bool): True if onkey present so all dups at onkey deleted
+                          False if onkey not present
 
         Parameters:
             db is opened named sub db with dupsort=True
-            pre (bytes | str): of itdentifier prefix prepended to sn in key
-                within sub db's keyspace
-            on (int): ordinal number to begin iteration at
+            key (bytes): key within sub db's keyspace plus trailing part on
+            sep (bytes): separator character for split
         """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            key = snKey(pre, cnt:=on)
-            while cursor.set_key(key):  # moves to first_dup
-                for val in cursor.iternext_dup():
-                    # slice off prepended ordering prefix
-                    yield val[33:]
-                key = snKey(pre, cnt:=cnt+1)
+        onkey = onKey(key, on, sep=sep)
+        return (self.delIoDupVals(db, key=onkey))
 
 
-    def getIoValsAllPreBackIter(self, db, pre, on=0):
-        """
-        Returns iterator of all dup vals in insertion order for all entries
-        with same prefix across all sequence numbers in decreasing order without gaps
-        between ordinals at a given pre.
-        Starting with on (default = 0) as begining ordinal number or sequence number.
-        Stops if gap or different pre.
-        Assumes that key is combination of prefix and sequence number given
-        by .snKey().
-        Removes prepended proem ordinal from each val before returning
+    def delOnIoDupVal(self, db, key, on=0, val=b'', sep=b'.'):
+        """Deletes dup ioval at key onkey consisting of key + sep + serialized
+        on in db.
+        Returns True if deleted else False if dup val not present
+        Assumes DB opened with dupsort=True
 
-        Raises StopIteration Error when empty.
+        Duplicates are inserted in lexocographic order not insertion order.
+        Lmdb does not insert a duplicate unless it is a unique value for that
+        key.
 
-        Duplicates are retrieved in insertion order.
+        Does inclusion test to dectect of duplicate already exists
+        Uses a python set for the duplicate inclusion test. Set inclusion scales
+        with O(1) whereas list inclusion scales with O(n).
 
-        Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        Returns:
+           result (bool): True if duplicate val found and deleted
+                          False if duplicate val does not exist at onkey
 
         Parameters:
             db is opened named sub db with dupsort=True
-            pre is bytes of identifier prefix prepended to sn in key
-                within sub db's keyspace
-            on (int): is ordinal number to begin iteration
+            key (bytes): key within sub db's keyspace plus trailing part on
+            val (bytes): serialized dup value to del at onkey
+            sep (bytes): separator character for split
         """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            key = snKey(pre, cnt := on)
-            # set_key returns True if exact key else false
-            while cursor.set_key(key):  # moves to first_dup if valid key
-                for val in cursor.iternext_dup():
-                    # slice off prepended ordering prefix
-                    yield val[33:]
-                key = snKey(pre, cnt:=cnt-1)
+        onkey = onKey(key, on, sep=sep)
+        return (self.delIoDupVal(db, key=onkey, val=val))
 
 
-    def getIoValLastAllPreIter(self, db, pre, on=0):
+
+    # used in OnIoDupSuber
+    def getOnIoDupValIter(self, db, key=b'', on=0, *, sep=b'.'):
         """
-        Returns iterator of last only of dup vals of each key in insertion order
-        for all entries with same prefix across all sequence numbers in increasing order
-        without gaps starting with on (default = 0). Stops if gap or different pre.
-        Assumes that key is combination of prefix and sequence number given
-        by .snKey().
-        Removes prepended proem ordinal from each val before returning
+        Returns iterator of val at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Returned items are triples of (key, on, val)
+        When dupsort==true then duplicates are included in items since .iternext
+        includes duplicates.
+        when key is empty then retrieves whole db
 
         Raises StopIteration Error when empty.
 
-        Duplicates are retrieved in insertion order.
-
-        Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
-
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val
 
         Parameters:
-            db is opened named sub db with dupsort=True
-            pre is bytes of itdentifier prefix prepended to sn in key
-                within sub db's keyspace
-            on (int): ordinal number to being iteration
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
         """
-        with self.env.begin(db=db, write=False, buffers=True) as txn:
-            cursor = txn.cursor()
-            key = snKey(pre, cnt:=on)
-            while cursor.set_key(key):  # moves to first_dup
-                if cursor.last_dup(): # move to last_dup
-                    yield cursor.value()[33:]  # slice off prepended ordering prefix
-                key = snKey(pre, cnt:=cnt+1)
+        for key, on, val in self.getOnIoDupItemIter(db=db, key=key, on=on, sep=sep):
+            yield (val)
 
 
-    def getIoValsAnyPreIter(self, db, pre, on=0):
+    # used in OnIoDupSuber
+    def getOnIoDupItemIter(self, db, key=b'', on=0, *, sep=b'.'):
         """
-        Returns iterator of all dup vals in insertion order for any entries
-        with same prefix across all ordinal numbers in order including gaps
-        between ordinals at a given pre. Staring with on (default = 0).
-        Stops when pre is different.
-
-        Duplicates that may be deleted such as duplicitous event logs need
-        to be able to iterate across gaps in ordinal number.
-
-        Assumes that key is combination of prefix and sequence number given
-        by .snKey().
-        Removes prepended proem ordinal from each val before returning
+        Returns iterator of triples (key, on, val), at each key over all ordinal
+        numbered keys with same key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Returned items are triples of (key, on, val)
+        when key is empty then retrieves whole db
 
         Raises StopIteration Error when empty.
 
-        Duplicates are retrieved in insertion order.
-        Because lmdb is lexocographic an insertion ordering proem is prepended to
-        all values that makes lexocographic order that same as insertion order
-        Duplicates are ordered as a pair of key plus value so prepending prefix
-        to each value changes duplicate ordering. Proem is 17 characters long.
-        With 16 character hex string followed by '.'.
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val
 
         Parameters:
-            db is opened named sub db with dupsort=True
-            pre is bytes of itdentifier prefix prepended to sn in key
-                within sub db's keyspace
-            on (int): beginning ordinal number to start iteration
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        for key, on, val in self.getOnItemIter(db=db, key=key, on=on, sep=sep):
+            val = val[33:] # strip proem
+            yield (key, on, val)
+
+
+    def getOnIoDupLastValIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """Returns iterator of val of last insertion ordered duplicate at each
+        key over all ordinal numbered keys with same full key
+        of key + sep + on in db. Values are sorted by onKey(key, on) where on
+        is ordinal number int and key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+        Returns:
+            val (Iterator[bytes]): last dup val at each onkey
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        for key, on, val in self.getOnIoDupLastItemIter(db=db, key=key, on=on, sep=sep):
+            yield (val)
+
+
+    def getOnIoDupLastItemIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """Returns iterator of triples (key, on, val), of last insertion ordered
+        duplicate at each key over all ordinal numbered keys with same full key
+        of key + sep + on in db. Values are sorted by
+        onKey(key, on) where on is ordinal number int and key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Returned items are triples of (key, on, val)
+
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
         """
         with self.env.begin(db=db, write=False, buffers=True) as txn:
             cursor = txn.cursor()
-            key = snKey(pre, cnt:=on)
-            while cursor.set_range(key):  #  moves to first dup of key >= key
-                key = cursor.key()  # actual key
-                front, back = bytes(key).split(sep=b'.', maxsplit=1)
-                if front != pre:  # set range may skip pre if none
+            if key:  # not empty
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+            else:  # empty
+                onkey = key
+
+            if not cursor.set_range(onkey):  # # moves to first_dup at key>=onkey
+                return  # no values end of db raises StopIteration
+
+            while cursor.last_dup(): # move to last_dup at current ckey
+                onkey, cval = cursor.item() # get ckey cval of last dup
+                ckey, on = splitOnKey(onkey, sep=sep)  # get key on
+                if key and not ckey == key:
                     break
-                for val in cursor.iternext_dup():
-                    yield val[33:]  # slice off prepended ordering prefix
-                cnt = int(back, 16)
-                key = snKey(pre, cnt:=cnt+1)
+
+                yield (ckey, on, cval[33:])  # slice off prepended ordering proem
+                onkey = onKey(ckey, on+1)
+                if not cursor.set_range(onkey):  # # moves to first_dup at key>=onkey
+                    return  # no values end of db raises StopIteration
+
+
+    def getOnIoDupValBackIter(self, db,  key=b'', on=0, *, sep=b'.'):
+        """Returns iterator going backwards of values,
+        of insertion ordered item at each key over all ordinal numbered keys
+        with same full key of key + sep + on in db.
+        Values are sorted by onKey(key, on) where on is ordinal number int and
+        key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Backwards means decreasing numerical value of duplicate proem, for each on,
+        decreasing numerical value on for each key and decresing lexocogrphic
+        order of each key prefix.
+
+        Returned items are vals
+
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            val (Iterator[bytes]): at key including duplicates in backwards order
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        for key, on, val in self.getOnIoDupItemBackIter(db=db, key=key, on=on, sep=sep):
+            yield (val)
+
+
+    def getOnIoDupItemBackIter(self, db, key=b'', on=0, *, sep=b'.'):
+        """Returns iterator going backwards of triples (key, on, val),
+        of insertion ordered item at each key over all ordinal numbered keys
+        with same full key of key + sep + on in db.
+        Values are sorted by onKey(key, on) where on is ordinal number int and
+        key is prefix sans on.
+        Values duplicates are sorted internally by hidden prefixed insertion order
+        proem ordinal
+        Backwards means decreasing numerical value of duplicate proem, for each on,
+        decreasing numerical value on for each key and decresing lexocogrphic
+        order of each key prefix.
+
+        Returned items are triples of (key, on, val)
+
+        when key is empty then retrieves whole db
+
+        Raises StopIteration Error when empty.
+
+        Returns:
+            items (Iterator[(key, on, val)]): triples of key, on, val
+
+        Parameters:
+            db (subdb): named sub db in lmdb
+            key (bytes): key within sub db's keyspace plus trailing part on
+                when key is empty then retrieves whole db
+            on (int): ordinal number at which to initiate retrieval
+            sep (bytes): separator character for split
+        """
+        with self.env.begin(db=db, write=False, buffers=True) as txn:
+            cursor = txn.cursor()
+            if not cursor.last():  # pre-position cursor at last dup of last key
+                return  # empty database so raise StopIteration
+
+            if key:  # not empty so attempt to position at starting key not last
+                onkey = onKey(key, on, sep=sep)  # start replay at this enty 0 is earliest
+                if cursor.set_range(onkey):  #  found key >= onkey
+                    ckey, cn = splitOnKey(cursor.key(), sep=sep)
+                    if ckey == key: # onkey in db
+                        cursor.last_dup()  # start at its last dup
+                    else:  # get closest key < onkey
+                        if not cursor.prev():  # last dup of previous key
+                            return  # no earlier keys to designated start
+
+            # cursor should now be correctly positioned for start either at
+            # last dup of either last key or onkey
+            for onkey, cval in cursor.iterprev(): # iterate backwards
+                ckey, on = splitOnKey(onkey, sep=sep)
+                if key and ckey != key:
+                    return
+                yield (ckey, on, cval[33:])
+
+
+
+    # ToDo do we need a replay last backwards?
+
