@@ -5,7 +5,7 @@ from hio.base import doing
 
 from keri.app import indirecting, habbing, grouping
 from keri.app.cli.common import existing
-from keri.core import serdering
+from keri.core import coring, serdering
 from keri.vdr import credentialing
 
 logger = help.ogler.getLogger()
@@ -18,7 +18,7 @@ parser.add_argument('--registry-name', '-r', help='Human readable name for regis
                     default=None, required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--verbose", "-V", help="print JSON of all current events", action="store_true")
 
@@ -61,7 +61,7 @@ class RegistryStatusor(doing.DoDoer):
         doers.extend([doing.doify(self.statusDo)])
         super(RegistryStatusor, self).__init__(doers=doers)
 
-    def statusDo(self, tymth, tock=0.0):
+    def statusDo(self, tymth, tock=0.0, **kwa):
         """ Process incoming messages to incept a credential registry
 
         Parameters:

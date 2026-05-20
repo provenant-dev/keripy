@@ -13,8 +13,12 @@ from hio.base import tyming, doing
 from hio.help import Hict
 
 from keri import help, kering
-from keri.app import habbing
+
+from keri import core
 from keri.core import coring, serdering
+
+from keri.app import habbing
+
 from keri.end import ending
 
 logger = help.ogler.getLogger()
@@ -35,13 +39,13 @@ def test_mimes():
     assert ending.KeriMimes.cesr == 'application/keri+cesr'
 
     # Usage: to get Mime from serialization kind
-    assert getattr(ending.Mimes, coring.Serials.json.lower()) == ending.Mimes.json
-    assert getattr(ending.Mimes, coring.Serials.mgpk.lower()) == ending.Mimes.mgpk
-    assert getattr(ending.Mimes, coring.Serials.cbor.lower()) == ending.Mimes.cbor
+    assert getattr(ending.Mimes, coring.Kinds.json.lower()) == ending.Mimes.json
+    assert getattr(ending.Mimes, coring.Kinds.mgpk.lower()) == ending.Mimes.mgpk
+    assert getattr(ending.Mimes, coring.Kinds.cbor.lower()) == ending.Mimes.cbor
 
-    assert getattr(ending.KeriMimes, coring.Serials.json.lower()) == ending.KeriMimes.json
-    assert getattr(ending.KeriMimes, coring.Serials.mgpk.lower()) == ending.KeriMimes.mgpk
-    assert getattr(ending.KeriMimes, coring.Serials.cbor.lower()) == ending.KeriMimes.cbor
+    assert getattr(ending.KeriMimes, coring.Kinds.json.lower()) == ending.KeriMimes.json
+    assert getattr(ending.KeriMimes, coring.Kinds.mgpk.lower()) == ending.KeriMimes.mgpk
+    assert getattr(ending.KeriMimes, coring.Kinds.cbor.lower()) == ending.KeriMimes.cbor
     """Done Test"""
 
 
@@ -59,7 +63,7 @@ def test_signature_designature():
     # db = basing.Baser(name=name, temp=temp, reopen=reopen)
 
     # Setup Habery and Hab
-    with habbing.openHby(name=name, base=base) as hby:
+    with habbing.openHby(name=name, base=base, salt=core.Salter(raw=b'0123456789abcdef').qb64) as hby:
         # hby = habbing.Habery(name=name, base=base, temp=temp, free=True)
         hab = hby.makeHab(name=name, icount=3)
         print()
@@ -313,7 +317,7 @@ def test_seid_api():
     # Setup Habery and Hab
     name = 'zoe'
     base = 'test'
-    with habbing.openHby(name=name, base=base) as hby:
+    with habbing.openHby(name=name, base=base, salt=core.Salter(raw=b'0123456789abcdef').qb64) as hby:
         hab = hby.makeHab(name=name)
         # hab = setupTestHab(name='zoe')
         # must do it here to inject into Falcon endpoint resource instances
@@ -382,7 +386,7 @@ def test_get_admin():
     # Setup Habery and Hab
     name = 'zoe'
     base = 'test'
-    with habbing.openHby(name=name, base=base) as hby:
+    with habbing.openHby(name=name, base=base, salt=core.Salter(raw=b'0123456789abcdef').qb64) as hby:
         hab = hby.makeHab(name=name)
         # hab = setupTestHab(name='zoe')
 
@@ -407,7 +411,7 @@ def test_get_oobi():
     # Setup Habery and Hab
     name = 'oobi'
     base = 'test'
-    salt = coring.Salter(raw=b'0123456789abcdef').qb64
+    salt = core.Salter(raw=b'0123456789abcdef').qb64
     with habbing.openHby(name=name, base=base, salt=salt) as hby:
         hab = hby.makeHab(name=name)
         msgs = bytearray()
@@ -441,7 +445,7 @@ def test_get_oobi():
         hab = hby.makeHab(name=name, delpre=delhab.pre)
 
         assert hab.pre == "EPERMS4wKU7ejhCdhI2qQR8snEx1cislR9C9bSEs0kS5"
-        assert hab.kever.delegator == delhab.pre
+        assert hab.kever.delpre == delhab.pre
 
         msgs.extend(hab.makeEndRole(eid=hab.pre,
                                     role=kering.Roles.controller,
@@ -482,7 +486,7 @@ def test_get_oobi():
 
 def test_siginput(mockHelpingNowUTC):
     print()
-    with habbing.openHab(name="test", base="test", temp=True) as (hby, hab):
+    with habbing.openHab(name="test", base="test", temp=True, salt=b'0123456789abcdef') as (hby, hab):
         headers = Hict([
             ("Content-Type", "application/json"),
             ("Content-Length", "256"),

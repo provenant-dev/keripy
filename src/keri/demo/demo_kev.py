@@ -11,7 +11,8 @@ import logging
 from keri import help
 from hio.base import doing
 
-from ..app import apping
+from ..app import habbing, keeping, apping
+from ..db import basing
 
 logger = help.ogler.getLogger()
 

@@ -8,14 +8,18 @@ import os
 import pytest
 from hio.help import decking
 
-from keri.app import habbing
-from keri.kering import ValidationError
-from keri.core import parsing, coring
-from keri.core.coring import (CtrDex, Counter, Signer, Salter)
-from keri.core.eventing import (Kever, Kevery, incept, rotate, interact)
-from keri.db.basing import openDB
+
+from keri.kering import ValidationError, Vrsn_1_0
 
 from keri import help
+
+from keri import core
+from keri.core import parsing, coring, Counter, Codens
+
+from keri.core.eventing import (Kever, Kevery, incept, rotate, interact)
+
+from keri.db.basing import openDB
+from keri.app import habbing
 from keri.peer import exchanging
 
 logger = help.ogler.getLogger()
@@ -29,7 +33,7 @@ def test_parser():
 
     #  create signers
     raw = b"ABCDEFGH01234567"
-    signers = Salter(raw=raw).signers(count=8, path='psr', temp=True)
+    signers = core.Salter(raw=raw).signers(count=8, path='psr', temp=True)
 
     with openDB(name="controller") as conDB, openDB(name="validator") as valDB:
         event_digs = []  # list of event digs in sequence
@@ -42,7 +46,7 @@ def test_parser():
                         ndigs=[coring.Diger(ser=signers[1].verfer.qb64b).qb64])
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[0].sign(serder.raw, index=0)  # return siger
         # create key event verifier state
@@ -68,7 +72,7 @@ def test_parser():
                         sn=1)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[1].sign(serder.raw, index=0)  # returns siger
         # update key event verifier state
@@ -86,7 +90,7 @@ def test_parser():
                         sn=2)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[2].sign(serder.raw, index=0)
         # update key event verifier state
@@ -102,7 +106,7 @@ def test_parser():
                           sn=3)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[2].sign(serder.raw, index=0)
         # update key event verifier state
@@ -118,7 +122,7 @@ def test_parser():
                           sn=4)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[2].sign(serder.raw, index=0)
         # update key event verifier state
@@ -136,7 +140,7 @@ def test_parser():
                         sn=5)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[3].sign(serder.raw, index=0)
         # update key event verifier state
@@ -152,7 +156,7 @@ def test_parser():
                           sn=6)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[3].sign(serder.raw, index=0)
         # update key event verifier state
@@ -170,7 +174,7 @@ def test_parser():
                         sn=7)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[4].sign(serder.raw, index=0)
         # update key event verifier state
@@ -185,7 +189,7 @@ def test_parser():
                           dig=kever.serder.said,
                           sn=8)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[4].sign(serder.raw, index=0)
         # update key event verifier state
@@ -203,7 +207,7 @@ def test_parser():
                         ndigs=[coring.Diger(ser=signers[5].verfer.qb64b).qb64],
                         sn=8)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[4].sign(serder.raw, index=0)
         # update key event verifier state
@@ -224,6 +228,11 @@ def test_parser():
         kevery = Kevery(db=valDB)
 
         parser = parsing.Parser(kvy=kevery)
+        assert parser.kvy == kevery
+        assert parser.local == False
+        assert parser.framed == True
+        assert parser.pipeline == False
+        assert parser.ims == bytearray()
 
         parser.parse(ims=bytearray(msgs))  # make copy
         assert parser.ims == bytearray(b'')  # emptied
@@ -236,7 +245,7 @@ def test_parser():
         db_digs = [bytes(val).decode("utf-8") for val in kevery.db.getKelIter(pre)]
         assert db_digs == event_digs
 
-        parser = parsing.Parser()  # no kevery
+        parser = parsing.Parser()  # no kevery so drops all messages
         parser.parse(ims=msgs)
         assert parser.ims == bytearray(b'')
 

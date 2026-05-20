@@ -10,17 +10,20 @@ import pysodium
 import pytest
 
 from keri import kering
+from keri.kering import Vrsn_1_0
 from keri.app import habbing, keeping
 from keri.app.keeping import openKS, Manager
+from keri import core
+from keri.core import Signer, Counter, Codens
 from keri.core import coring, eventing, parsing, serdering
-from keri.core.coring import (Diger, MtrDex, Matter, IdrDex, Indexer,
-                              CtrDex, Counter, Salter, Siger, Cigar,
-                              Seqner, Verfer, Signer, Prefixer,
-                              generateSigners, IdxSigDex, DigDex)
+from keri.core.coring import (Diger, MtrDex, Matter,
+                              Cigar,
+                              Seqner, Verfer, Prefixer, DigDex)
+from keri.core.indexing import (IdrDex, IdxSigDex, Indexer, Siger)
 from keri.core.eventing import Kever, Kevery
 from keri.core.eventing import (SealDigest, SealRoot, SealBacker,
                                 SealEvent, SealLast, StateEvent, StateEstEvent)
-from keri.core.eventing import (TraitDex, LastEstLoc, Serials, versify,
+from keri.core.eventing import (TraitDex, LastEstLoc, Kinds, versify,
                                 simple, ample)
 from keri.core.eventing import (deWitnessCouple, deReceiptCouple, deSourceCouple,
                                 deReceiptTriple,
@@ -1520,7 +1523,7 @@ def test_state(mockHelpingNowUTC):
     # use same salter for all but different path
     # raw = pysodium.randombytes(pysodium.crypto_pwhash_SALTBYTES)
     raw = b'\x05\xaa\x8f-S\x9a\xe9\xfaU\x9c\x02\x9c\x9b\x08Hu'
-    salter = Salter(raw=raw)
+    salter = core.Salter(raw=raw)
 
     # State NonDelegated (key state notification)
     # create transferable key pair for controller of KEL
@@ -1801,7 +1804,7 @@ def test_messagize():
     """
     Test messagize utility function
     """
-    salter = Salter(raw=b'0123456789abcdef')
+    salter = core.Salter(raw=b'0123456789abcdef')
     with openDB(name="edy") as db, openKS(name="edy") as ks:
         # Init key pair manager
         mgr = Manager(ks=ks, salt=salter.qb64)
@@ -2062,7 +2065,7 @@ def test_kever(mockHelpingNowUTC):
     with openDB() as db:  # Transferable case
         # Setup inception key event dict
         raw = b'\x05\xaa\x8f-S\x9a\xe9\xfaU\x9c\x02\x9c\x9b\x08Hu'
-        salter = Salter(raw=raw)
+        salter = core.Salter(raw=raw)
         # create current key
         sith = 1  # one signer
         #  original signing keypair transferable default
@@ -2090,7 +2093,8 @@ def test_kever(mockHelpingNowUTC):
         # make with defaults with non-digestive prefix
         serder = serdering.SerderKERI(makify=True,
                                       ilk=kering.Ilks.icp,
-                                      saids = {'i': coring.PreDex.Ed25519})
+                                      saids = {'i': coring.PreDex.Ed25519},
+                                      verify=False)
 
         sad = serder.sad
         sad['i'] = skp0.verfer.qb64  # non-digestive aid
@@ -2144,7 +2148,7 @@ def test_kever(mockHelpingNowUTC):
         # test exposeds
         raw = b"raw salt to test"
         #  create signers with verfers
-        signers = coring.Salter(raw=raw).signers(count=3, path="next", temp=True)
+        signers = core.Salter(raw=raw).signers(count=3, path="next", temp=True)
 
         # create something to sign
         ser = b'abcdefghijklmnopqrstuvwxyz0123456789'
@@ -2233,7 +2237,8 @@ def test_kever(mockHelpingNowUTC):
         # make with defaults with non-transferable prefix
         serder = serdering.SerderKERI(makify=True,
                                       ilk=kering.Ilks.icp,
-                                      saids = {'i': coring.PreDex.Ed25519N})
+                                      saids = {'i': coring.PreDex.Ed25519N},
+                                      verify=False)
 
         sad = serder.sad
         sad['i'] = skp0.verfer.qb64  # non-digestive aid
@@ -2244,7 +2249,7 @@ def test_kever(mockHelpingNowUTC):
         sad['n'] = nxt
         sad['bt'] = "{:x}".format(toad)
 
-        serder = serdering.SerderKERI(makify=True, verify=True, sad=sad)
+        serder = serdering.SerderKERI(makify=True, verify=False, sad=sad)
         assert serder.said == 'EFsuiA86Q5gGuVOO3tou8KSU6LORSExIUxzWNrlnW7WP'
         assert serder.pre == skp0.verfer.qb64
         aid0 = serder.pre
@@ -2270,7 +2275,8 @@ def test_kever(mockHelpingNowUTC):
         # make with defaults with non-transferable prefix
         serder = serdering.SerderKERI(makify=True,
                                       ilk=kering.Ilks.icp,
-                                      saids = {'i': coring.PreDex.Ed25519N})
+                                      saids = {'i': coring.PreDex.Ed25519N},
+                                      verify=False)
 
         sad = serder.sad
         sad['i'] = skp0.verfer.qb64  # non-digestive aid
@@ -2278,7 +2284,7 @@ def test_kever(mockHelpingNowUTC):
         sad['kt'] = "{:x}".format(sith)  # hex string
         sad['k'] = keys
         sad['nt'] = 0
-        sad['n'] = nxt
+        sad['n'] = nxt  # empty nxt
         sad['bt'] = "{:x}".format(toad)
 
         serder = serdering.SerderKERI(makify=True, verify=True, sad=sad)
@@ -2327,7 +2333,8 @@ def test_kever(mockHelpingNowUTC):
         # make with defaults with non-transferable prefix
         serder = serdering.SerderKERI(makify=True,
                                       ilk=kering.Ilks.icp,
-                                      saids = {'i': coring.PreDex.Ed25519N})
+                                      saids = {'i': coring.PreDex.Ed25519N},
+                                      verify=False)
 
         sad = serder.sad
         sad['i'] = skp0.verfer.qb64  # non-digestive aid
@@ -2339,7 +2346,7 @@ def test_kever(mockHelpingNowUTC):
         sad['bt'] = "{:x}".format(toad)
         sad['b'] = baks
 
-        serder = serdering.SerderKERI(makify=True, verify=True, sad=sad)
+        serder = serdering.SerderKERI(makify=True, verify=False, sad=sad)
         assert serder.said == 'EKcREpfNupJ8oOqdnqDIyJVr1-GgIMBrVOtBUR9Gm6lO'
         assert serder.pre == skp0.verfer.qb64
 
@@ -2362,7 +2369,7 @@ def test_kever(mockHelpingNowUTC):
         sad =serder.sad  # makes copy
         sad['bt'] = "{:x}".format(toad)
 
-        serder = serdering.SerderKERI(makify=True, verify=True, sad=sad)
+        serder = serdering.SerderKERI(makify=True, verify=False, sad=sad)
         assert serder.said == 'EBKhptvqccp0KNBaS45bNPdTE4m19U1IvweHJW2PIEDI'
         assert serder.pre == skp0.verfer.qb64
 
@@ -2391,7 +2398,7 @@ def test_kever(mockHelpingNowUTC):
         sad['b'] = baks
         sad['a'] = a
 
-        serder = serdering.SerderKERI(makify=True, verify=True, sad=sad)
+        serder = serdering.SerderKERI(makify=True, verify=False, sad=sad)
         assert serder.said == 'EEu-cdj_9b_66XRJ5UuhgEvJxAPpn4RjyaHvRgDU3iyA'
         assert serder.pre == skp0.verfer.qb64
 
@@ -2447,7 +2454,7 @@ def test_keyeventsequence_0():
     """
     #  create signers
     salt = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    signers = generateSigners(salt=salt, count=8, transferable=True)
+    signers = core.Salter(raw=salt).signers(count=8)
 
     pubkeys = [signer.verfer.qb64 for signer in signers]
     assert pubkeys == ['DErocgXD2RGSyvn3MObcx59jeOsEQhv2TqHirVkzrp0Q',
@@ -2717,7 +2724,7 @@ def test_keyeventsequence_1():
 
     #  create signers
     salt = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    signers = generateSigners(salt=salt, count=8, transferable=True)
+    signers = core.Salter(raw=salt).signers(count=8)
 
     pubkeys = [signer.verfer.qb64 for signer in signers]
     assert pubkeys == ['DErocgXD2RGSyvn3MObcx59jeOsEQhv2TqHirVkzrp0Q',
@@ -2814,7 +2821,7 @@ def test_multisig_digprefix():
 
     #  create signers
     salt = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    signers = generateSigners(salt=salt, count=8, transferable=True)
+    signers = core.Salter(raw=salt).signers(count=8)
 
     pubkeys = [signer.verfer.qb64 for signer in signers]
     assert pubkeys == ['DErocgXD2RGSyvn3MObcx59jeOsEQhv2TqHirVkzrp0Q',
@@ -2845,7 +2852,7 @@ def test_multisig_digprefix():
 
         # create sig counter
         count = len(keys)
-        counter = Counter(CtrDex.ControllerIdxSigs, count=count)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, count=count, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         sigers = [signers[i].sign(serder.raw, index=i) for i in range(count)]
         # create key event verifier state
@@ -2881,7 +2888,7 @@ def test_multisig_digprefix():
                         sn=1)
         # create sig counter
         count = len(keys)
-        counter = Counter(CtrDex.ControllerIdxSigs, count=count)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, count=count, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         sigers = [signers[i].sign(serder.raw, index=i - count) for i in range(count, count + count)]
         # update key event verifier state
@@ -2897,7 +2904,7 @@ def test_multisig_digprefix():
                           dig=kever.serder.said,
                           sn=2)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs, count=count)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, count=count, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         sigers = [signers[i].sign(serder.raw, index=i - count) for i in range(count, count + count)]
         # update key event verifier state
@@ -2913,7 +2920,7 @@ def test_multisig_digprefix():
                           dig=kever.serder.said,
                           sn=3)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs, count=count)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, count=count, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         sigers = [signers[i].sign(serder.raw, index=i - count) for i in range(count, count + count)]
         # update key event verifier state
@@ -2933,7 +2940,7 @@ def test_multisig_digprefix():
                         dig=kever.serder.said,
                         sn=4)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs, count=count)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, count=count, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         sigers = [signers[i].sign(serder.raw, index=i - 5) for i in range(5, 8)]
         # update key event verifier state
@@ -2968,7 +2975,7 @@ def test_recovery():
     """
     #  create signers
     salt = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    signers = generateSigners(salt=salt, count=8, transferable=True)
+    signers = core.Salter(raw=salt).signers(count=8)
 
     with openDB(name="controller") as conlgr, openDB(name="validator") as vallgr:
         event_digs = []  # list of event digs in sequence to verify against database
@@ -2985,7 +2992,7 @@ def test_recovery():
 
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)  # return siger
         # create key event verifier state
@@ -3007,7 +3014,7 @@ def test_recovery():
 
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)  # returns siger
         # update key event verifier state
@@ -3026,7 +3033,7 @@ def test_recovery():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3048,7 +3055,7 @@ def test_recovery():
                         sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3067,7 +3074,7 @@ def test_recovery():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3086,7 +3093,7 @@ def test_recovery():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3105,7 +3112,7 @@ def test_recovery():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3128,7 +3135,7 @@ def test_recovery():
                         sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3147,7 +3154,7 @@ def test_recovery():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = signers[esn].sign(serder.raw, index=0)
         # update key event verifier state
@@ -3199,7 +3206,7 @@ def test_receipt():
     """
 
     raw = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    salter = Salter(raw=raw)
+    salter = core.Salter(raw=raw)
 
     #  create coe's signers
     coeSigners = salter.signers(count=8, path='coe', temp=True)
@@ -3238,7 +3245,7 @@ def test_receipt():
 
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)  # return Siger if index
 
@@ -3267,7 +3274,7 @@ def test_receipt():
         valCigar = valSigner.sign(ser=serder.raw)  # returns Cigar cause no index
         assert valCigar.qb64 == ('0BADE2aOlwLi6OCF-jzRWSPuaOo916ADjwhA92hBQ1km'
                                  'LSSYdzDiZIpJNFf0uislNR8uhCbB6x2Y1I6rqbNeBXwF')
-        recnt = Counter(code=CtrDex.NonTransReceiptCouples, count=1)
+        recnt = Counter(code=Codens.NonTransReceiptCouples, count=1, gvrsn=Vrsn_1_0)
         assert recnt.qb64 == '-CAB'
 
         res.extend(reserder.raw)
@@ -3296,7 +3303,7 @@ def test_receipt():
                            said=fake)
         # sign event not receipt
         valCigar = valSigner.sign(ser=serder.raw)  # returns Cigar cause no index
-        recnt = Counter(code=CtrDex.NonTransReceiptCouples, count=1)
+        recnt = Counter(code=Codens.NonTransReceiptCouples, count=1, gvrsn=Vrsn_1_0)
         # attach to receipt msg stream
         res.extend(reserder.raw)
         res.extend(recnt.qb64b)
@@ -3318,7 +3325,7 @@ def test_receipt():
                            said=fake)
         # sign event not receipt
         valCigar = valSigner.sign(ser=serder.raw)  # returns Cigar cause no index
-        recnt = Counter(code=CtrDex.NonTransReceiptCouples, count=1)
+        recnt = Counter(code=Codens.NonTransReceiptCouples, count=1, gvrsn=Vrsn_1_0)
         # attach to receipt msg stream
         res.extend(reserder.raw)
         res.extend(recnt.qb64b)
@@ -3348,7 +3355,7 @@ def test_receipt():
 
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)  # returns siger
         # extend key event stream
@@ -3369,7 +3376,7 @@ def test_receipt():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)
 
@@ -3394,7 +3401,7 @@ def test_receipt():
                         sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)
 
@@ -3416,7 +3423,7 @@ def test_receipt():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)
 
@@ -3438,7 +3445,7 @@ def test_receipt():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)
 
@@ -3460,7 +3467,7 @@ def test_receipt():
                           sn=sn)
         event_digs.append(serder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[esn].sign(serder.raw, index=0)
 
@@ -3496,7 +3503,7 @@ def test_direct_mode():
     #  but goes both ways once initiated.
 
     raw = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    salter = Salter(raw=raw)
+    salter = core.Salter(raw=raw)
 
     #  create coe's signers
     coeSigners = salter.signers(count=8, path='coe', temp=True)
@@ -3530,7 +3537,7 @@ def test_direct_mode():
 
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)  # return Siger if index
 
@@ -3563,7 +3570,7 @@ def test_direct_mode():
 
         val_event_digs.append(valSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = valSigners[vesn].sign(valSerder.raw, index=0)  # return Siger if index
 
@@ -3744,7 +3751,7 @@ def test_direct_mode():
                            sn=csn)
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)  # returns siger
 
@@ -3838,7 +3845,7 @@ def test_direct_mode():
                              sn=csn)
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)
 
@@ -3962,7 +3969,7 @@ def test_direct_mode_cbor_mgpk():
     #  but goes both ways once initiated.
 
     raw = b'g\x15\x89\x1a@\xa4\xa47\x07\xb9Q\xb8\x18\xcdJW'
-    salter = Salter(raw=raw)
+    salter = core.Salter(raw=raw)
 
     #  create coe's signers
     coeSigners = salter.signers(count=8, path='coe', temp=True)
@@ -3989,14 +3996,14 @@ def test_direct_mode_cbor_mgpk():
         coeSerder = incept(keys=[coeSigners[cesn].verfer.qb64],
                            ndigs=[coring.Diger(ser=coeSigners[cesn + 1].verfer.qb64b).qb64],
                            code=MtrDex.Blake3_256,
-                           kind=Serials.cbor)
+                           kind=Kinds.cbor)
 
         assert csn == int(coeSerder.ked["s"], 16) == 0
         coepre = coeSerder.ked["i"]
 
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)  # return Siger if index
 
@@ -4021,14 +4028,14 @@ def test_direct_mode_cbor_mgpk():
         valSerder = incept(keys=[valSigners[vesn].verfer.qb64],
                            ndigs=[coring.Diger(ser=valSigners[vesn + 1].verfer.qb64b).qb64],
                            code=MtrDex.Blake3_256,
-                           kind=Serials.mgpk)
+                           kind=Kinds.mgpk)
 
         assert vsn == int(valSerder.ked["s"], 16) == 0
         valpre = valSerder.ked["i"]
 
         val_event_digs.append(valSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = valSigners[vesn].sign(valSerder.raw, index=0)  # return Siger if index
 
@@ -4065,7 +4072,7 @@ def test_direct_mode_cbor_mgpk():
         reserder = receipt(pre=coeK.prefixer.qb64,
                            sn=coeK.sn,
                            said=coeK.serder.said,
-                           kind=Serials.mgpk)
+                           kind=Kinds.mgpk)
         # sign coe's event not receipt
         # look up event to sign from val's kever for coe
         coeIcpDig = bytes(valKevery.db.getKeLast(key=snKey(pre=coepre, sn=csn)))
@@ -4116,7 +4123,7 @@ def test_direct_mode_cbor_mgpk():
         reserder = receipt(pre=coeK.prefixer.qb64,
                            sn=10,
                            said=fake,
-                           kind=Serials.mgpk)
+                           kind=Kinds.mgpk)
         # sign event not receipt
         siger = valSigners[vesn].sign(ser=coeIcpRaw, index=0)  # return Siger if index
 
@@ -4151,7 +4158,7 @@ def test_direct_mode_cbor_mgpk():
         reserder = receipt(pre=valK.prefixer.qb64,
                            sn=valK.sn,
                            said=valK.serder.said,
-                           kind=Serials.cbor)
+                           kind=Kinds.cbor)
         # sign vals's event not receipt
         # look up event to sign from coe's kever for val
         valIcpDig = bytes(coeKevery.db.getKeLast(key=snKey(pre=valpre, sn=vsn)))
@@ -4204,10 +4211,10 @@ def test_direct_mode_cbor_mgpk():
                            dig=coeKever.serder.said,
                            ndigs=[coring.Diger(ser=coeSigners[cesn + 1].verfer.qb64b).qb64],
                            sn=csn,
-                           kind=Serials.cbor)
+                           kind=Kinds.cbor)
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)  # returns siger
 
@@ -4246,7 +4253,7 @@ def test_direct_mode_cbor_mgpk():
         reserder = receipt(pre=coeK.prefixer.qb64,
                            sn=coeK.sn,
                            said=coeK.serder.said,
-                           kind=Serials.mgpk)
+                           kind=Kinds.mgpk)
         # sign coe's event not receipt
         # look up event to sign from val's kever for coe
         coeRotDig = bytes(valKevery.db.getKeLast(key=snKey(pre=coepre, sn=csn)))
@@ -4298,10 +4305,10 @@ def test_direct_mode_cbor_mgpk():
         coeSerder = interact(pre=coeKever.prefixer.qb64,
                              dig=coeKever.serder.said,
                              sn=csn,
-                             kind=Serials.cbor)
+                             kind=Kinds.cbor)
         coe_event_digs.append(coeSerder.said)
         # create sig counter
-        counter = Counter(CtrDex.ControllerIdxSigs)  # default is count = 1
+        counter = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)  # default is count = 1
         # sign serialization
         siger = coeSigners[cesn].sign(coeSerder.raw, index=0)
 
@@ -4338,7 +4345,7 @@ def test_direct_mode_cbor_mgpk():
         reserder = receipt(pre=coeK.prefixer.qb64,
                            sn=coeK.sn,
                            said=coeK.serder.said,
-                           kind=Serials.mgpk)
+                           kind=Kinds.mgpk)
         # sign coe's event not receipt
         # look up event to sign from val's kever for coe
         coeIxnDig = bytes(valKevery.db.getKeLast(key=snKey(pre=coepre, sn=csn)))
@@ -4437,7 +4444,7 @@ def test_process_nontransferable():
     nsigs = 1  # one attached signature unspecified index
 
     #["v", "t", "d", "i", "s",  "kt", "k", "nt", "n","bt", "b", "c", "a"]
-    ked0 = dict(v=versify(kind=Serials.json, size=0),
+    ked0 = dict(v=versify(kind=Kinds.json, size=0),
                 t=Ilks.icp,
                 d="",
                 i=aid0.qb64,  # qual base 64 prefix
@@ -4453,8 +4460,6 @@ def test_process_nontransferable():
                 )
     _, ked0 = coring.Saider.saidify(sad=ked0)
 
-    # verify derivation of aid0 from ked0
-    assert aid0.verify(ked=ked0)
 
     # Serialize ked0
     tser0 = serdering.SerderKERI(sad=ked0)
@@ -4466,7 +4471,7 @@ def test_process_nontransferable():
     assert skp0.verfer.verify(tsig0.raw, tser0.raw)
 
     # create attached sig counter
-    cnt0 = Counter(CtrDex.ControllerIdxSigs)
+    cnt0 = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)
 
     # create packet
     msgb0 = bytearray(tser0.raw + cnt0.qb64b + tsig0.qb64b)
@@ -4477,7 +4482,7 @@ def test_process_nontransferable():
     del msgb0[:rser0.size]  # strip off event from front
 
     # extract sig counter
-    rcnt0 = Counter(qb64=msgb0)
+    rcnt0 = Counter(qb64=msgb0, gvrsn=Vrsn_1_0)
     nrsigs = rcnt0.count
     assert nrsigs == 1
     del msgb0[:len(rcnt0.qb64)]
@@ -4493,9 +4498,6 @@ def test_process_nontransferable():
         assert verfer.verify(rsig.raw, rser0.raw)
         del msgb0[:len(rsig.qb64)]
 
-    # verify pre
-    raid0 = Prefixer(qb64=rser0.pre)
-    assert raid0.verify(ked=rser0.ked)
     """ Done Test """
 
 
@@ -4525,7 +4527,7 @@ def test_process_transferable():
     nsigs = 1  # one attached signature unspecified index
 
 
-    ked0 = dict(v=versify(kind=Serials.json, size=0),  # version string
+    ked0 = dict(v=versify(kind=Kinds.json, size=0),  # version string
                t=Ilks.icp,
                d="",  # SAID
                i="",  # qb64 prefix
@@ -4541,8 +4543,9 @@ def test_process_transferable():
                )
 
 
-    # Use non digestive AID
-    aid0 = Prefixer(ked=ked0, code=MtrDex.Ed25519)
+    # Use non digestive AID made from keys[0]
+    aid0 = Prefixer(raw=Verfer(qb64=keys[0]).raw, code=MtrDex.Ed25519)
+    #aid0 = Prefixer(ked=ked0, code=MtrDex.Ed25519)
     assert aid0.code == MtrDex.Ed25519
     assert aid0.qb64 == skp0.verfer.qb64
     # update ked with pre
@@ -4559,7 +4562,7 @@ def test_process_transferable():
     assert skp0.verfer.verify(tsig0.raw, tser0.raw)
 
     # create attached sig counter
-    cnt0 = Counter(CtrDex.ControllerIdxSigs)
+    cnt0 = Counter(Codens.ControllerIdxSigs, gvrsn=Vrsn_1_0)
 
     # create packet
     msgb0 = bytearray(tser0.raw + cnt0.qb64b + tsig0.qb64b)
@@ -4570,7 +4573,7 @@ def test_process_transferable():
     del msgb0[:rser0.size]  # strip off event from front
 
     # extract sig counter
-    rcnt0 = Counter(qb64=msgb0)
+    rcnt0 = Counter(qb64=msgb0, gvrsn=Vrsn_1_0)
     nrsigs = rcnt0.count
     assert nrsigs == 1
     del msgb0[:len(rcnt0.qb64)]
@@ -4585,10 +4588,6 @@ def test_process_transferable():
         assert verfer.qb64 == skp0.verfer.qb64
         assert verfer.verify(rsig.raw, rser0.raw)
         del msgb0[:len(rsig.qb64)]
-
-    # verify pre
-    raid0 = Prefixer(qb64=rser0.pre)
-    assert raid0.verify(ked=rser0.ked)
 
     # verify nxt digest from event is still valid
     digers=rser0.ndigers
@@ -4652,7 +4651,7 @@ def test_process_manual():
     index = 0
 
     # create key event dict
-    ked0 = dict(v=versify(kind=Serials.json, size=0),
+    ked0 = dict(v=versify(kind=Kinds.json, size=0),
                 t=Ilks.icp,
                 d="",
                 i=aidmat.qb64,  # qual base 64 prefix
@@ -4668,7 +4667,7 @@ def test_process_manual():
                 )
     _, ked0 = coring.Saider.saidify(sad=ked0)
 
-    txsrdr = serdering.SerderKERI(sad=ked0, kind=Serials.json)
+    txsrdr = serdering.SerderKERI(sad=ked0, kind=Kinds.json)
     assert txsrdr.raw == (b'{"v":"KERI10JSON00012b_","t":"icp","d":"EKYHED-wvkYDZv4tNUF9qiC1kgnnGLS9YUU8'
                         b'PCWig_n4","i":"DK-WsHD7MKfQpBjJ3B2GwjqY9z90G94uzMs7irCiT-dL","s":"0","kt":"1'
                         b'","k":["DK-WsHD7MKfQpBjJ3B2GwjqY9z90G94uzMs7irCiT-dL"],"nt":"1","n":["EDcWJG'
@@ -4726,7 +4725,7 @@ def test_reload_kever(mockHelpingNowUTC):
     Test reload Kever from keystate state message
     """
 
-    with habbing.openHby(name="nat", base="test") as natHby:
+    with habbing.openHby(name="nat", base="test", salt=core.Salter(raw=b'0123456789abcdef').qb64) as natHby:
         # setup Nat's habitat using default salt multisig already incepts
         natHab = natHby.makeHab(name="nat", isith='2', icount=3)
         assert natHab.name == 'nat'
@@ -4795,10 +4794,10 @@ def test_reload_kever(mockHelpingNowUTC):
 
 
 def test_load_event(mockHelpingNowUTC):
-    with habbing.openHby(name="tor", base="test") as torHby, \
-         habbing.openHby(name="wil", base="test") as wilHby, \
-         habbing.openHby(name="wan", base="test") as wanHby, \
-         habbing.openHby(name="tee", base="test") as teeHby:
+    with habbing.openHby(name="tor", base="test", salt=core.Salter(raw=b'0123456789abcdef').qb64) as torHby, \
+         habbing.openHby(name="wil", base="test", salt=core.Salter(raw=b'0123456789abcdef').qb64) as wilHby, \
+         habbing.openHby(name="wan", base="test", salt=core.Salter(raw=b'0123456789abcdef').qb64) as wanHby, \
+         habbing.openHby(name="tee", base="test", salt=core.Salter(raw=b'0123456789abcdef').qb64) as teeHby:
 
         wanKvy = Kevery(db=wanHby.db, lax=False, local=False)
         torKvy = Kevery(db=torHby.db, lax=False, local=False)
@@ -4808,6 +4807,7 @@ def test_load_event(mockHelpingNowUTC):
         assert wanHab.pre == "BAbSj3jfaeJbpuqg0WtvHw31UoRZOnN_RZQYBwbAqteP"
         msg = wanHab.makeOwnEvent(sn=0)
         parsing.Parser().parse(ims=msg, kvy=torKvy)
+        assert wanHab.pre in torKvy.kevers
 
         # Create Wil the witness, we'll use him later
         wilHab = wilHby.makeHab(name="wil", transferable=False)
@@ -4816,14 +4816,16 @@ def test_load_event(mockHelpingNowUTC):
         torHab = torHby.makeHab(name="tor", icount=1, isith='1', ncount=1, nsith='1', wits=[wanHab.pre], toad=1)
         assert torHab.pre == "EBOVJXs0trI76PRfvJB2fsZ56PrtyR6HrUT9LOBra8VP"
         torIcp = torHab.makeOwnEvent(sn=0)
+        assert torHab.pre in torHab.kvy.kevers
 
         # Try to load event before Wan has seen it
         with pytest.raises(ValueError):
             _ = eventing.loadEvent(wanHab.db, torHab.pre, torHab.pre)
 
-        parsing.Parser().parse(ims=bytearray(torIcp), kvy=wanKvy)
+        # tor events are locallyWitnessed by wan so must process as local
+        parsing.Parser().parse(ims=bytearray(torIcp), kvy=wanHab.kvy, local=True) # process as local
 
-        wanHab.processCues(wanKvy.cues)  # process cue returns rct msg
+        wanHab.processCues(wanHab.kvy.cues)  # process cue returns rct msg
         evt = eventing.loadEvent(wanHab.db, torHab.pre, torHab.pre)
         assert evt == {'ked': {'a': [],
                                'b': ['BAbSj3jfaeJbpuqg0WtvHw31UoRZOnN_RZQYBwbAqteP'],
@@ -4857,8 +4859,8 @@ def test_load_event(mockHelpingNowUTC):
 
         # Anchor Tee's inception event in Tor's KEL
         ixn = torHab.interact(data=[dict(i=teeHab.pre, s='0', d=teeHab.kever.serder.said)])
-        parsing.Parser().parse(ims=bytearray(ixn), kvy=wanKvy)
-        wanHab.processCues(wanKvy.cues)  # process cue returns rct msg
+        parsing.Parser().parse(ims=bytearray(ixn), kvy=wanHab.kvy, local=True)  # give to wan must be local
+        wanHab.processCues(wanHab.kvy.cues)  # process cue returns rct msg
 
         evt = eventing.loadEvent(wanHab.db, torHab.pre, torHab.kever.serder.said)
         assert evt == {'ked': {'a': [{'d': 'EDnrWpxagMvr5BBCwCOh3q5M9lvurboZ66vxR-GnIgQo',
@@ -4882,8 +4884,8 @@ def test_load_event(mockHelpingNowUTC):
                        'witnesses': []}
 
         # Add seal source couple to Tee's inception before sending to Wan
-        counter = coring.Counter(code=coring.CtrDex.SealSourceCouples,
-                                 count=1)
+        counter = Counter(Codens.SealSourceCouples,
+                                 count=1, gvrsn=Vrsn_1_0)
         teeIcp.extend(counter.qb64b)
         seqner = coring.Seqner(sn=torHab.kever.sn)
         teeIcp.extend(seqner.qb64b)
@@ -4894,14 +4896,51 @@ def test_load_event(mockHelpingNowUTC):
         nrct = wilHab.receipt(serder=teeHab.kever.serder)
 
         # Now Wan should be ready for Tee's inception
-        parsing.Parser().parse(ims=bytearray(teeIcp), kvy=wanKvy)
-        parsing.Parser().parse(ims=bytearray(rct), kvy=wanKvy)
-        parsing.Parser().parse(ims=bytearray(nrct), kvy=wanKvy)
+        parsing.Parser().parse(ims=bytearray(teeIcp), kvy=wanKvy, local=True)  # local
+        parsing.Parser().parse(ims=bytearray(rct), kvy=wanHab.kvy, local=True) # local
+        parsing.Parser().parse(ims=bytearray(nrct), kvy=wanHab.kvy, local=True)  # local
+        # ToDo XXXX fix it so cues are durable in db so can process cues from
+        # both and remote sources
+        wanHab.processCues(wanHab.kvy.cues)  # process cue returns rct msg
         wanHab.processCues(wanKvy.cues)  # process cue returns rct msg
 
         # Endorse Tee's inception event with Wan's Hab just so we have non-trans receipts
 
         evt = eventing.loadEvent(wanHab.db, teeHab.pre, teeHab.pre)
+        #assert evt == {'ked': {'a': [],
+                               #'b': ['BAbSj3jfaeJbpuqg0WtvHw31UoRZOnN_RZQYBwbAqteP'],
+                               #'bt': '1',
+                               #'c': [],
+                               #'d': 'EDnrWpxagMvr5BBCwCOh3q5M9lvurboZ66vxR-GnIgQo',
+                               #'di': 'EBOVJXs0trI76PRfvJB2fsZ56PrtyR6HrUT9LOBra8VP',
+                               #'i': 'EDnrWpxagMvr5BBCwCOh3q5M9lvurboZ66vxR-GnIgQo',
+                               #'k': ['DLDlVl1H2Q138A5tftVRpyy834ejsY33BB71kXLRNP2h'],
+                               #'kt': '1',
+                               #'n': ['EBTtZqMkJOO4nf3cCt6SdezwkoCKtx2fGUKHeFApj_Yx'],
+                               #'nt': '1',
+                               #'s': '0',
+                               #'t': 'dip',
+                               #'v': 'KERI10JSON00018d_'},
+                       #'receipts': {'nontransferable': [{'prefix': 'BEXrSXVksXpnfno_Di6RBX2Lsr9VWRAihjLhowfjNOQQ',
+                                                         #'signature': '0BCQOeNT3mwAHxh6mYU9K_B2VmbtjJh7_8115k4JrBPR3c4'
+                                                                      #'3jUSO197H2J73vWMi61qzOovNkSWQbnRx3NFnrk8I'}],
+                                    #'transferable': [{'prefix': 'EBOVJXs0trI76PRfvJB2fsZ56PrtyR6HrUT9LOBra8VP',
+                                                      #'said': 'EBOVJXs0trI76PRfvJB2fsZ56PrtyR6HrUT9LOBra8VP',
+                                                      #'sequence': '0AAAAAAAAAAAAAAAAAAAAAAA',
+                                                      #'signature': 'AADGbcmUNw_SX7OVNX-PQYl41UZx_pgJXHOoMWrcfmCDGgkc1-'
+                                                                   #'MqXJjMD9S9moJ-lpPL9-AiXgITemMZL_QYGzIA'}]},
+                       #'signatures': [{'index': 0,
+                                       #'signature': 'AAC1-NTntZ0xkgHwooNcKxe9G4XC-rgkSryVz0B_QrZR2kkv4IKi7DMkfMBd4Eck-'
+                                                    #'2NAi0DMuZeXnlvch6ZP0coO'}],
+                       #'source_seal': {'said': 'EF7pHYN6XABC9znRdzprt5frW-MMry9rfrCI-_t5Y8VD',
+                                       #'sequence': 1},
+                       #'stored': True,
+                       #'timestamp': '2021-01-01T00:00:00.000000+00:00',
+                       #'witness_signatures': [{'index': 0,
+                                               #'signature': 'AABPMW3J1iZyMC-elPOkdIhddhZB_BJYHTdYv5SxcrOfJL_5igDVB6zKD'
+                                                            #'AQiTj_cNa7oP-l6xSRRxwlHDwqgSwcB'}],
+                       #'witnesses': ['BAbSj3jfaeJbpuqg0WtvHw31UoRZOnN_RZQYBwbAqteP']}
+        # no source seal in load
         assert evt == {'ked': {'a': [],
                                'b': ['BAbSj3jfaeJbpuqg0WtvHw31UoRZOnN_RZQYBwbAqteP'],
                                'bt': '1',
@@ -4927,8 +4966,6 @@ def test_load_event(mockHelpingNowUTC):
                        'signatures': [{'index': 0,
                                        'signature': 'AAC1-NTntZ0xkgHwooNcKxe9G4XC-rgkSryVz0B_QrZR2kkv4IKi7DMkfMBd4Eck-'
                                                     '2NAi0DMuZeXnlvch6ZP0coO'}],
-                       'source_seal': {'said': 'EF7pHYN6XABC9znRdzprt5frW-MMry9rfrCI-_t5Y8VD',
-                                       'sequence': 1},
                        'stored': True,
                        'timestamp': '2021-01-01T00:00:00.000000+00:00',
                        'witness_signatures': [{'index': 0,
@@ -4942,7 +4979,7 @@ def test_load_event(mockHelpingNowUTC):
 if __name__ == "__main__":
     # pytest.main(['-vv', 'test_eventing.py::test_keyeventfuncs'])
     #test_process_manual()
-    #test_keyeventsequence_0()
+    test_keyeventsequence_0()
     #test_process_transferable()
     #test_messagize()
     test_direct_mode()

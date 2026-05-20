@@ -23,13 +23,32 @@ class HabitatRecordV0_6_7:  # baser.habs
 
     watchers: list[str] = field(default_factory=list)  # aids qb64 of watchers
 
+@dataclass
+class HabitatRecordV0_6_8:  # baser.habs
+    """
+    Habitat application state information keyed by habitat name (baser.habs)
+
+    Attributes:
+        hid (str): identifier prefix of hab qb64
+        mid (str | None): group member identifier qb64 when hid is group
+        smids (list | None): group signing member identifiers qb64 when hid is group
+        rmids (list | None): group signing member identifiers qb64 when hid is group
+        watchers: (list[str]) = list of id prefixes qb64 of watchers
+
+
+    """
+    hid: str  # hab own identifier prefix qb64
+    mid: str | None = None  # group member identifier qb64 when hid is group
+    smids: list | None = None  # group signing member ids when hid is group
+    rmids: list | None = None  # group rotating member ids when hid is group
+    sid: str | None = None  # Signify identifier qb64 when hid is Signify
+    watchers: list[str] = field(default_factory=list)  # id prefixes qb64 of watchers
+
 def _check_if_needed(db):
     """
     Check if the migration is needed
-
     Parameters:
         db(Baser): Baser database object on which to run the migration
-
     Returns:
         bool: True if the migration is needed, False otherwise
     """
@@ -56,7 +75,7 @@ def migrate(db):
     # May be running on a database that is already in the right state yet has no migrations run
     # so we need to check if the migration is needed
     if not _check_if_needed(db):
-        print(f"{__name__} migration not needed, already ran")
+        print(f"{__name__} migration not needed, database already in correct state")
         return
 
     habs = koming.Komer(db=db,
@@ -68,7 +87,7 @@ def migrate(db):
     for name, habord in habs.getItemIter():
         existing = asdict(habord)
         habord_0_6_7 = HabitatRecordV0_6_7(**existing)
-        habord_0_6_8 = HabitatRecord(
+        habord_0_6_8 = HabitatRecordV0_6_8(
             hid=habord_0_6_7.prefix,
             mid=habord_0_6_7.pid,
             smids=habord_0_6_7.aids,
@@ -76,13 +95,15 @@ def migrate(db):
             sid=None,
             watchers=habord_0_6_7.watchers
         )
-        habords[name] = habord_0_6_8
+        habords[habord_0_6_8.hid] = habord_0_6_8
 
     habs.trim() # remove existing records
 
     # Add in the renamed records
-    for name, habord in habords.items():
-        (name,) = name
-        db.habs.pin(keys=(name,), val=habord)
+    habs = koming.Komer(db=db,
+                        subkey='habs.',
+                        schema=HabitatRecordV0_6_8, )
 
+    for pre, habord in habords.items():
+        habs.pin(keys=(pre,), val=habord)
 

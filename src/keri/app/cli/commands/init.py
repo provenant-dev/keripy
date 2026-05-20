@@ -5,13 +5,17 @@ keri.kli.commands module
 """
 import argparse
 import getpass
+import os
+import sys
 
 from keri import help
 from hio.base import doing
 
 import keri.app.oobiing
-from keri.app import habbing, configing, oobiing, connecting
+from keri import kering
+from keri.app import habbing, configing, oobiing
 from keri.app.keeping import Algos
+from keri.db import basing
 from keri.kering import ConfigurationError
 from keri.vdr import credentialing
 
@@ -48,7 +52,7 @@ parser.add_argument('--config-file',
 
 # Parameters for Manager creation
 # passcode => bran
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)
 parser.add_argument('--nopasscode', help='create an unencrypted keystore', action='store_true')
 parser.add_argument('--aeid', '-a', help='qualified base64 of non-transferable identifier prefix for  authentication '
@@ -63,7 +67,7 @@ class InitDoer(doing.DoDoer):
         self.args = args
         super(InitDoer, self).__init__(doers=[doing.doify(self.initialize)])
 
-    def initialize(self, tymth, tock=0.0):
+    def initialize(self, tymth, tock=0.0, **kwa):
 
         # enter context
         self.wind(tymth)
@@ -82,7 +86,7 @@ class InitDoer(doing.DoDoer):
         configDir = args.configDir
 
         if not args.nopasscode and not bran:
-            print("Creating encrypted keystore, please enter your 22 character passcode:")
+            print("Creating encrypted keystore, please enter your 21 character passcode:")
             while True:
                 bran = getpass.getpass("Passcode: ")
                 retry = getpass.getpass("Re-enter passcode: ")

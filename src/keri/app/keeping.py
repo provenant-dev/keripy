@@ -23,6 +23,7 @@ raw = json.dumps(ked, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 """
 import math
+import os
 from collections import namedtuple, deque
 from dataclasses import dataclass, asdict, field
 
@@ -30,9 +31,12 @@ import pysodium
 from hio.base import doing
 
 from .. import kering
+from .. import core, help
 from ..core import coring
 from ..db import dbing, subing, koming
 from ..help import helping
+
+logger = help.ogler.getLogger()
 
 Algoage = namedtuple("Algoage", 'randy salty group extern')
 Algos = Algoage(randy='randy', salty='salty', group="group", extern="extern")  # randy is rerandomize, salty is use salt
@@ -127,6 +131,9 @@ def openKS(name="test", **kwa):
             Otherwise open in persistent directory, do not clear on close
     """
     return dbing.openLMDB(cls=Keeper, name=name, **kwa)
+
+# Env var for configuring LMDB size for the Keeper database
+KERIKeeperMapSizeKey = "KERI_KEEPER_MAP_SIZE"
 
 
 class Keeper(dbing.LMDBer):
@@ -250,6 +257,15 @@ class Keeper(dbing.LMDBer):
         if perm is None:
             perm = self.Perm  # defaults to restricted permissions for non temp
 
+        mapSize = os.getenv(dbing.KERIKeeperMapSizeKey) or os.getenv(dbing.KERILMDBMapSizeKey)
+        if mapSize is not None:
+            try:
+                self.MapSize = int(mapSize)
+            except ValueError:
+                logger.error(f"LMDB map size environment variable must be an integer value > 1! "
+                            f"Use {dbing.KERIKeeperMapSizeKey} or {dbing.KERILMDBMapSizeKey}")
+                raise
+
         super(Keeper, self).__init__(headDirPath=headDirPath, perm=perm,
                                      reopen=reopen, **kwa)
 
@@ -267,10 +283,10 @@ class Keeper(dbing.LMDBer):
         self.pris = subing.CryptSignerSuber(db=self, subkey='pris.')
         self.prxs = subing.CesrSuber(db=self,
                                      subkey='prxs.',
-                                     klas=coring.Cipher)
+                                     klas=core.Cipher)
         self.nxts = subing.CesrSuber(db=self,
                                      subkey='nxts.',
-                                     klas=coring.Cipher)
+                                     klas=core.Cipher)
         self.smids = subing.CatCesrIoSetSuber(db=self,
                                               subkey='smids.',
                                               klas=(coring.Prefixer, coring.Seqner))
@@ -342,7 +358,7 @@ class KeeperDoer(doing.Doer):
         self.keeper = keeper
 
 
-    def enter(self):
+    def enter(self, *, temp=False):
         """"""
         if not self.keeper.opened:
             self.keeper.reopen()
@@ -444,7 +460,7 @@ class RandyCreator(Creator):
             codes = [code for i in range(count)]
 
         for code in codes:
-            signers.append(coring.Signer(code=code, transferable=transferable))
+            signers.append(core.Signer(code=code, transferable=transferable))
         return signers
 
 
@@ -477,7 +493,7 @@ class SaltyCreator(Creator):
 
         """
         super(SaltyCreator, self).__init__(**kwa)
-        self.salter = coring.Salter(qb64=salt, tier=tier)
+        self.salter = core.Salter(qb64=salt, tier=tier)
         self._stem = stem if stem is not None else ''
 
     @property
@@ -596,9 +612,9 @@ class Manager:
 
     Attributes:
         ks (Keeper): key store LMDB database instance for storing public and private keys
-        encrypter (coring.Encrypter): instance for encrypting secrets. Public
+        encrypter (core.Encrypter): instance for encrypting secrets. Public
             encryption key is derived from aeid (public signing key)
-        decrypter (coring.Decrypter): instance for decrypting secrets. Private
+        decrypter (core.Decrypter): instance for decrypting secrets. Private
             decryption key is derived seed (private signing key seed)
         inited (bool): True means fully initialized wrt database.
                           False means not yet fully initialized
@@ -724,13 +740,13 @@ class Manager:
         if algo is None:
             algo = Algos.salty
         if salt is None:
-            salt = coring.Salter().qb64
+            salt = core.Salter().qb64
         else:
-            if coring.Salter(qb64=salt).qb64 != salt:
+            if core.Salter(qb64=salt).qb64 != salt:
                 raise ValueError(f"Invalid qb64 for salt={salt}.")
 
         if tier is None:
-            tier = coring.Tiers.low
+            tier = core.Tiers.low
 
         # update  database if never before initialized
         if self.pidx is None:  # never before initialized
@@ -749,13 +765,13 @@ class Manager:
         if not self.aeid:  # never before initialized
             self.updateAeid(aeid, self.seed)
         else:
-            self.encrypter = coring.Encrypter(verkey=self.aeid)  # derive encrypter from aeid
+            self.encrypter = core.Encrypter(verkey=self.aeid)  # derive encrypter from aeid
             if not self.seed or not self.encrypter.verifySeed(self.seed):
                 raise kering.AuthError("Last seed missing or provided last seed "
                                        "not associated with last aeid={}."
                                        "".format(self.aeid))
 
-            self.decrypter = coring.Decrypter(seed=self.seed)
+            self.decrypter = core.Decrypter(seed=self.seed)
 
         self.inited = True
 
@@ -781,7 +797,7 @@ class Manager:
 
         if aeid:  # aeid provided
             if aeid != self.aeid:  # changing to a new aeid so update .encrypter
-                self.encrypter = coring.Encrypter(verkey=aeid)  # derive encrypter from aeid
+                self.encrypter = core.Encrypter(verkey=aeid)  # derive encrypter from aeid
                 # verifies new seed belongs to new aeid
                 if not seed or not self.encrypter.verifySeed(seed):
                     raise kering.AuthError("Seed missing or provided seed not associated"
@@ -803,8 +819,8 @@ class Manager:
             # re-encrypt root salt secrets by prefix parameters .prms
             for keys, data in self.ks.prms.getItemIter():  # keys is tuple of pre qb64
                 if data.salt:
-                    salter = self.decrypter.decrypt(ser=data.salt)
-                    data.salt = (self.encrypter.encrypt(matter=salter).qb64
+                    salter = self.decrypter.decrypt(qb64=data.salt)
+                    data.salt = (self.encrypter.encrypt(prim=salter).qb64
                                  if self.encrypter else salter.qb64)
                     self.ks.prms.pin(keys, val=data)
 
@@ -817,7 +833,7 @@ class Manager:
         self._seed = seed  # set .seed in memory
 
         # update .decrypter
-        self.decrypter = coring.Decrypter(seed=seed) if seed else None
+        self.decrypter = core.Decrypter(seed=seed) if seed else None
 
 
     @property
@@ -888,7 +904,7 @@ class Manager:
         """
         salt = self.ks.gbls.get('salt')
         if self.decrypter:  # given .decrypt secret salt must be encrypted in db
-            return self.decrypter.decrypt(ser=salt).qb64
+            return self.decrypter.decrypt(qb64=salt).qb64
         return salt
 
 
@@ -901,7 +917,7 @@ class Manager:
                 may be plain text or cipher text handled by updateAeid
         """
         if self.encrypter:
-            salt = self.encrypter.encrypt(ser=salt).qb64
+            salt = self.encrypter.encrypt(ser=salt, code=core.MtrDex.X25519_Cipher_Salt).qb64
         self.ks.gbls.pin('salt', salt)
 
 
@@ -1019,7 +1035,8 @@ class Manager:
 
         if creator.salt:
             pp.salt = (creator.salt if not self.encrypter
-                       else self.encrypter.encrypt(ser=creator.salt).qb64)
+                       else self.encrypter.encrypt(ser=creator.salt,
+                                    code=core.MtrDex.X25519_Cipher_Salt).qb64)
 
         dt = helping.nowIso8601()
         ps = PreSit(
@@ -1183,9 +1200,9 @@ class Manager:
             if self.aeid:
                 if not self.decrypter:
                     raise kering.DecryptError("Unauthorized decryption. Aeid but no decrypter.")
-                salt = self.decrypter.decrypt(ser=salt).qb64
+                salt = self.decrypter.decrypt(qb64=salt).qb64
             else:
-                salt = coring.Salter(qb64=salt).qb64  # ensures salt was unencrypted
+                salt = core.Salter(qb64=salt).qb64  # ensures salt was unencrypted
 
         creator = Creatory(algo=pp.algo).make(salt=salt, stem=pp.stem, tier=pp.tier)
 
@@ -1393,21 +1410,23 @@ class Manager:
                 cigars.append(signer.sign(ser))  # assigns .verfer to cigar
             return cigars
 
-    def decrypt(self, ser, pubs=None, verfers=None):
+
+    def decrypt(self, qb64, pubs=None, verfers=None):
         """
-        Returns list of signatures of ser if indexed as Sigers else as Cigars with
-        .verfer assigned.
+        Returns decrypted plaintext of encrypted qb64 ciphertext serialization.
 
         Parameters:
-            ser (bytes): serialization to sign
+            qb64 (str | bytes | bytearray | memoryview): fully qualified base64
+                ciphertext serialization to decrypt
             pubs (list[str] | None): of qb64 public keys to lookup private keys
                 one of pubs or verfers is required. If both then verfers is ignored.
             verfers (list[Verfer] | None): Verfer instances of public keys
                 one of pubs or verfers is required. If both then verfers is ignored.
-                If not pubs then gets public key from verfer.qb64
+                If not pubs then gets public key from verfer.qb64 used to lookup
+                private keys
 
         Returns:
-            bytes: decrypted data
+            plain (bytes): decrypted plaintext
 
         """
         signers = []
@@ -1432,17 +1451,21 @@ class Manager:
                     raise ValueError("Missing prikey in db for pubkey={}".format(verfer.qb64))
                 signers.append(signer)
 
-        plain = ser
+        if hasattr(qb64, "encode"):
+            qb64 = qb64.encode()  # convert str to bytes
+        qb64 = bytes(qb64)  # convert bytearray or memoryview to bytes
+
         for signer in signers:
             sigkey = signer.raw + signer.verfer.raw  # sigkey is raw seed + raw verkey
             prikey = pysodium.crypto_sign_sk_to_box_sk(sigkey)  # raw private encrypt key
             pubkey = pysodium.crypto_scalarmult_curve25519_base(prikey)
-            plain = pysodium.crypto_box_seal_open(plain, pubkey, prikey)  # qb64b
+            plain = pysodium.crypto_box_seal_open(qb64, pubkey, prikey)  # qb64b
 
-        if plain == ser:
-            raise ValueError("unable to decrypt data")
+        if plain == qb64:
+            raise ValueError(f"Unable to decrypt.")
 
         return plain
+
 
     def ingest(self, secrecies, iridx=0, ncount=1, ncode=coring.MtrDex.Ed25519_Seed,
                      dcode=coring.MtrDex.Blake3_256,
@@ -1531,7 +1554,7 @@ class Manager:
         secrecies = deque(secrecies)
         while secrecies:
             csecrets = secrecies.popleft()  # current
-            csigners = [coring.Signer(qb64=secret, transferable=transferable)
+            csigners = [core.Signer(qb64=secret, transferable=transferable)
                                                       for secret in csecrets]
             csize = len(csigners)
             verferies.append([signer.verfer for signer in csigners])
@@ -1541,7 +1564,8 @@ class Manager:
                 pp = PrePrm(pidx=pidx,
                             algo=algo,
                             salt=(creator.salt if not self.encrypter
-                                  else self.encrypter.encrypt(ser=creator.salt).qb64),
+                                  else self.encrypter.encrypt(ser=creator.salt,
+                                        code=core.MtrDex.X25519_Cipher_Salt).qb64),
                             stem=creator.stem,
                             tier=creator.tier)
                 pre = csigners[0].verfer.qb64b
@@ -1747,7 +1771,7 @@ class ManagerDoer(doing.Doer):
         self.manager = manager
 
 
-    def enter(self):
+    def enter(self, *, temp=False):
         """"""
         if not self.manager.inited:
             self.manager.setup(**self.manager._inits)

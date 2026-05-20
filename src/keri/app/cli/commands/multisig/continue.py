@@ -23,7 +23,7 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the local identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 
@@ -65,7 +65,7 @@ class ContinueDoer(doing.DoDoer):
         (seqner, saider) = esc[0]
         src = hab.mhab.pre if isinstance(hab, GroupHab) else hab.pre
         anchor = dict(i=hab.pre, s=seqner.snh, d=saider.qb64)
-        self.witq.query(src=src, pre=hab.kever.delegator, anchor=anchor)
+        self.witq.query(src=src, pre=hab.kever.delpre, anchor=anchor)
 
         print(f"Checking mailboxes for any events to process")
         while self.hby.db.cgms.get(keys=(hab.pre, seqner.qb64)) is None:

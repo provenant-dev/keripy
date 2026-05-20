@@ -9,10 +9,10 @@ module for enveloping and forwarding KERI message
 from hio.base import doing
 from hio.help import decking
 
-from .. import kering
+from .. import kering, core
 from .. import help
 from ..app import delegating, agenting
-from ..core import coring, routing, eventing, parsing, serdering
+from ..core import coring, routing, eventing, parsing, serdering, indexing
 from ..db import dbing
 from ..db.dbing import snKey
 from ..peer import exchanging
@@ -25,7 +25,7 @@ class Counselor(doing.DoDoer):
     def __init__(self, hby, swain=None, proxy=None, **kwa):
 
         self.hby = hby
-        self.swain = swain if swain is not None else delegating.Sealer(hby=self.hby)
+        self.swain = swain if swain is not None else delegating.Anchorer(hby=self.hby)
         self.proxy = proxy
         self.witDoer = agenting.Receiptor(hby=self.hby)
         self.witq = agenting.WitnessInquisitor(hby=hby)
@@ -47,11 +47,9 @@ class Counselor(doing.DoDoer):
             saider (Saider): saider of event of group identifier
 
         """
-        evt = ghab.makeOwnEvent(sn=seqner.sn, allowPartiallySigned=True)
-        serder = serdering.SerderKERI(raw=evt)
-        del evt[:serder.size]
-
-        logger.info(f"Waiting for other signatures for {serder.ilk} {serder.pre}:{seqner.sn}...")
+        evt = ghab.makeOwnEvent(sn=seqner.sn, allowPartiallySigned=True) # used just for the log message
+        serder = serdering.SerderKERI(raw=evt)                           # used just for the log message
+        logger.info("Waiting for other signatures on %s for %s:%s...", serder.ilk, prefixer.qb64, seqner.sn)
         return self.hby.db.gpse.add(keys=(prefixer.qb64,), val=(seqner, saider))
 
     def complete(self, prefixer, seqner, saider=None):
@@ -74,7 +72,7 @@ class Counselor(doing.DoDoer):
 
         return True
 
-    def escrowDo(self, tymth, tock=1.0):
+    def escrowDo(self, tymth, tock=1.0, **kwa):
         """ Process escrows of group multisig identifiers waiting to be compeleted.
 
         Steps involve:
@@ -124,7 +122,7 @@ class Counselor(doing.DoDoer):
                 if not sigs:  # otherwise its a list of sigs
                     continue
 
-                sigers = [coring.Siger(qb64b=bytes(sig)) for sig in sigs]
+                sigers = [indexing.Siger(qb64b=bytes(sig)) for sig in sigs]
                 windex = min([siger.index for siger in sigers])
 
                 # True if Elected to perform delegation and witnessing
@@ -133,24 +131,27 @@ class Counselor(doing.DoDoer):
                 if kever.delegated and kever.ilk in (coring.Ilks.dip, coring.Ilks.drt):
                     # We are a delegated identifier, must wait for delegator approval for dip and drt
                     if witered:  # We are elected to perform delegation and witnessing messaging
-                        logger.info(f"We are the witnesser, sending {pre} to delegator")
+                        logger.info("AID %s...%s: We are the witnesser, sending %s to delegator",
+                                    pre[:4], pre[-4:], pre)
                         self.swain.delegation(pre=pre, sn=seqner.sn)
                     else:
                         anchor = dict(i=pre, s=seqner.snh, d=saider.qb64)
                         if self.proxy:
-                            self.witq.query(hab=self.proxy, pre=kever.delegator, anchor=anchor)
+                            self.witq.query(hab=self.proxy, pre=kever.delpre, anchor=anchor)
                         else:
-                            self.witq.query(src=ghab.mhab.pre, pre=kever.delegator, anchor=anchor)
+                            self.witq.query(src=ghab.mhab.pre, pre=kever.delpre, anchor=anchor)
 
-                    logger.info(f"Waiting for delegation approval...")
+                    logger.info("AID %s...%s: Waiting for delegation approval...", pre[:4], pre[-4:])
                     self.hby.db.gdee.add(keys=(pre,), val=(seqner, saider))
                 else:  # Non-delegation, move on to witnessing
                     if witered:  # We are elected witnesser, send off event to witnesses
-                        logger.info(f"We are the fully signed witnesser {seqner.sn}, sending to witnesses")
+                        logger.info("AID %s...%s: We are the fully signed witnesser %s, sending to witnesses",
+                                    pre[:4], pre[-4:], seqner.sn)
                         self.witDoer.msgs.append(dict(pre=pre, sn=seqner.sn))
 
                     # Move to escrow waiting for witness receipts
-                    logger.info(f"Waiting for fully signed witness receipts for {seqner.sn}")
+                    logger.info("AID %s...%s: Waiting for fully signed witness receipts for %s",
+                                pre[:4], pre[-4:], seqner.sn)
                     self.hby.db.gpwe.add(keys=(pre,), val=(seqner, saider))
 
     def processDelegateEscrow(self):
@@ -170,21 +171,23 @@ class Counselor(doing.DoDoer):
             if witer:  # We are elected witnesser, We've already done out part in Boatswain, we are done.
                 if self.swain.complete(prefixer=kever.prefixer, seqner=coring.Seqner(sn=kever.sn)):
                     self.hby.db.gdee.rem(keys=(pre,))
-                    logger.info(f"Delegation approval for {pre} received.")
+                    logger.info("AID %s...%s: Delegation approval for %s received.",
+                                pre[:4], pre[-4:], pre)
 
                     self.hby.db.cgms.put(keys=(pre, seqner.qb64), val=saider)
 
             else:  # Not witnesser, we need to look for the anchor and then wait for receipts
-                if serder := self.hby.db.findAnchoringSealEvent(kever.delegator, seal=anchor):
+                if serder := self.hby.db.fetchLastSealingEventByEventSeal(kever.delpre,
+                                                                          seal=anchor):
                     aseq = coring.Seqner(sn=serder.sn)
                     couple = aseq.qb64b + serder.saidb
                     dgkey = dbing.dgKey(pre, saider.qb64b)
                     self.hby.db.setAes(dgkey, couple)  # authorizer event seal (delegator/issuer)
                     self.hby.db.gdee.rem(keys=(pre,))
-                    logger.info(f"Delegation approval for {pre} received.")
+                    logger.info("AID %s...%s: Delegation approval for %s received.", pre[:4], pre[-4:], pre)
 
                     # Move to escrow waiting for witness receipts
-                    logger.info(f"Waiting for witness receipts for {pre}")
+                    logger.info("AID %s...%s: Waiting for witness receipts for %s", pre[:4], pre[-4:], pre)
                     self.hby.db.gdee.rem(keys=(pre,))
                     self.hby.db.gpwe.add(keys=(pre,), val=(seqner, saider))
 
@@ -212,7 +215,7 @@ class Counselor(doing.DoDoer):
                             witnessed = True
                     if not witnessed:
                         continue
-                logger.info(f"Witness receipts complete, {pre} confirmed.")
+                logger.info("AID %s...%s: Witness receipts complete, %s confirmed.", pre[:4], pre[-4:], pre)
                 self.hby.db.gpwe.rem(keys=(pre,))
                 self.hby.db.cgms.put(keys=(pre, seqner.qb64), val=saider)
             elif not witer:
@@ -243,7 +246,8 @@ class MultisigNotificationHandler:
             attachments (list): list of tuples of pather, CESR SAD path attachments to the exn event
 
         """
-        logger.info("handling %s event SAID=%s", self.resource, serder.said)
+        logger.info("Notification for %s event SAID=%s", self.resource, serder.said)
+        logger.debug("EXN Body=\n%s\n", serder.pretty())
         self.mux.add(serder=serder)
 
 
@@ -280,7 +284,7 @@ def multisigInceptExn(hab, smids, rmids, icp, delegator=None):
 
     """
     rmids = rmids if rmids is not None else smids
-    serder = serdering.SerderKERI(raw=icp) # coring.Serder(raw=icp)
+    serder = serdering.SerderKERI(raw=icp)
     data = dict(
         gid=serder.pre,
         smids=smids,
@@ -517,20 +521,20 @@ def getEscrowedEvent(db, pre, sn):
 
     sigs = []
     for sig in db.getSigsIter(key):
-        sigs.append(coring.Siger(qb64b=bytes(sig)))
+        sigs.append(indexing.Siger(qb64b=bytes(sig)))
 
     couple = db.getAes(key)
 
     msg = bytearray()
     msg.extend(serder.raw)
-    msg.extend(coring.Counter(code=coring.CtrDex.ControllerIdxSigs,
-                              count=len(sigs)).qb64b)  # attach cnt
+    msg.extend(core.Counter(core.Codens.ControllerIdxSigs,
+                            count=len(sigs), gvrsn=kering.Vrsn_1_0).qb64b)  # attach cnt
     for sig in sigs:
         msg.extend(sig.qb64b)  # attach sig
 
     if couple is not None:
-        msg.extend(coring.Counter(code=coring.CtrDex.SealSourceCouples,
-                                  count=1).qb64b)
+        msg.extend(core.Counter(core.Codens.SealSourceCouples,
+                                count=1, gvrsn=kering.Vrsn_1_0).qb64b)
         msg.extend(couple)
 
     return msg
@@ -590,7 +594,7 @@ class Multiplexor:
         events so that any addition signatures can be processed.
 
         Parameters:
-            serder (coring.Serder): peer-to-peer exn "/multisig" message to coordinate from other participants
+            serder (serdering.SerderKERI): peer-to-peer exn "/multisig" message to coordinate from other participants
 
         Returns:
 
@@ -667,7 +671,7 @@ class Multiplexor:
                         ims.extend(atc)
 
                 # ... and parse
-                self.psr.parse(ims=ims)
+                self.psr.parse(ims=ims, local=True)
 
             else:
                 # Should we prod the user with another submission if we haven't already approved it?

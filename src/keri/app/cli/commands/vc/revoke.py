@@ -24,7 +24,7 @@ parser.add_argument('--registry-name', '-r', help='Human readable name for regis
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--said', help='is SAID vc content qb64')
 parser.add_argument('--send', help='alias of contact to send the revocation events to (can be repeated)',
@@ -71,7 +71,7 @@ class RevokeDoer(doing.DoDoer):
         doers.extend([doing.doify(self.revokeDo)])
         super(RevokeDoer, self).__init__(doers=doers, **kwa)
 
-    def revokeDo(self, tymth, tock=0.0):
+    def revokeDo(self, tymth, tock=0.0, **kwa):
         """  Revoke Credential doer method
 
 

@@ -23,7 +23,7 @@ parser.set_defaults(handler=lambda args: join(args))
 parser.add_argument('--name', '-n', help='keystore name and file location of KERI keystore', required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--auto", "-Y", help="auto approve any delegation request non-interactively", action="store_true")
 
@@ -90,7 +90,7 @@ class JoinDoer(doing.DoDoer):
         self.auto = auto
         super(JoinDoer, self).__init__(doers=doers)
 
-    def joinDo(self, tymth, tock=0.0):
+    def joinDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of

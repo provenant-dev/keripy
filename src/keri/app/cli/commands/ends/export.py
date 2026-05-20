@@ -11,7 +11,7 @@ from hio.base import doing
 
 from keri import kering
 from keri.app.cli.common import existing
-from keri.core import eventing
+from keri.core import coring, eventing
 
 logger = help.ogler.getLogger()
 
@@ -21,7 +21,7 @@ parser.set_defaults(handler=lambda args: export_ends(args),
 parser.add_argument('--name', '-n', help='keystore name and file location of KERI keystore', required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--aid", "-a", help="qualified base64 of AID to export rpy messages for all endpoints.",
@@ -50,7 +50,7 @@ class ExportDoer(doing.DoDoer):
 
         super(ExportDoer, self).__init__(doers=doers)
 
-    def exportDo(self, tymth, tock=0.0):
+    def exportDo(self, tymth, tock=0.0, **kwa):
         """ Export any end reply messages previous saved for the provided AID
 
         Parameters:

@@ -6,8 +6,8 @@ keri.kli.commands.escrow module
 """
 import argparse
 
-from keri import help
 from hio.base import doing
+from keri import help
 from keri.app.cli.common import existing
 from keri.vdr import viring
 
@@ -21,7 +21,7 @@ parser.add_argument('--base', '-b', help='additional optional prefix to file loc
                     required=False, default="")
 parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
-parser.add_argument('--force', '-f', action="store_true", required=False,
+parser.add_argument('--force', action="store_true", required=False,
                     help='True means perform clear without prompting the user')
 
 
@@ -54,4 +54,3 @@ def clear(tymth, tock=0.0, **opts):
         hby.db.clearEscrows()
         reger = viring.Reger(name=hby.name, db=hby.db, temp=False)
         reger.clearEscrows()
-

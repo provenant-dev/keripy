@@ -1,17 +1,20 @@
 # -*- encoding: utf-8 -*-
 """
-keri.kli.commands.migrate.run module
+keri.kli.commands module
 
 """
 import argparse
 
-from hio.base import doing
-
+import keri
 from keri import help
+from hio.base import doing
 from keri import kering
+
+from keri.app.cli.common import existing
 from keri.db import basing
 
 logger = help.ogler.getLogger()
+
 
 def handler(args):
     """
@@ -24,7 +27,7 @@ def handler(args):
     return [migrator]
 
 
-parser = argparse.ArgumentParser(description='Migrates a database and keystore')
+parser = argparse.ArgumentParser(description='Cleans and migrates a database and keystore up to the latest source code version')
 parser.set_defaults(handler=handler,
                     transferable=True)
 
@@ -47,21 +50,18 @@ class MigrateDoer(doing.Doer):
         super(MigrateDoer, self).__init__()
 
     def recur(self, tyme):
-        name=self.args.name
-        base=self.args.base
-        temp=self.args.temp
-        hab_db = basing.Baser(name=name,
-                              base=base,
-                              temp=temp,
-                              reopen=False)
+        db = basing.Baser(name=self.args.name,
+                          base=self.args.base,
+                          temp=self.args.temp,
+                          reopen=False)
 
         try:
-            hab_db.reopen()
-        except kering.DatabaseError as ex:
+            db.reopen()
+        except kering.DatabaseError:
             pass
 
-        print(f"Migrating {name}...")
-        hab_db.migrate()
-        print(f"Finished migrating {name}")
+        print(f"Migrating {self.args.name}...")
+        db.migrate()
+        print(f"Finished migrating {self.args.name}")
 
         return True

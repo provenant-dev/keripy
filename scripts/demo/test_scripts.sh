@@ -4,6 +4,7 @@
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 source "${script_dir}"/demo-scripts.sh
+source "${script_dir}"/basic/script-utils.sh
 
 # Launch witnesses in background
 kli witness demo &
@@ -53,10 +54,16 @@ printf "\n************************************\n"
 isSuccess
 
 printf "\n************************************\n"
-printf "Running multisig-delegate-delegator.sh"
+printf "Running multisig-rotate-three-stooges.sh"
 printf "\n************************************\n"
-"${script_dir}/basic/multisig-delegate-delegator.sh"
+"${script_dir}/basic/multisig-rotate-three-stooges.sh"
 isSuccess
+
+printf "\n************************************\n"
+printf "Skipping multisig-delegate-delegator.sh"
+printf "\n************************************\n"
+#"${script_dir}/basic/multisig-delegate-delegator.sh"
+#isSuccess
 
 printf "\n************************************\n"
 printf "Running challenge.sh"
@@ -68,4 +75,10 @@ printf "\n************************************\n"
 printf "Running multisig-join.sh"
 printf "\n************************************\n"
 "${script_dir}/basic/multisig-join.sh"
+isSuccess
+
+printf "\n************************************\n"
+printf "Running rename.sh"
+printf "\n************************************\n"
+"${script_dir}/basic/rename-alias.sh"
 isSuccess

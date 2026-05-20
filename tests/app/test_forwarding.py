@@ -8,14 +8,17 @@ import time
 
 from hio.base import doing, tyming
 
-from keri.app import forwarding, habbing, indirecting, storing
+from keri import core
 from keri.core import coring, eventing, parsing, serdering
+
+from keri.app import forwarding, habbing, indirecting, storing
+
 from keri.peer import exchanging
 
 
 def test_postman(seeder):
     with habbing.openHab(name="test", transferable=True, temp=True) as (hby, hab), \
-            habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64, temp=True) as wesHby, \
+            habbing.openHby(name="wes", salt=core.Salter(raw=b'wess-the-witness').qb64, temp=True) as wesHby, \
             habbing.openHby(name="repTest", temp=True) as recpHby:
 
         mbx = storing.Mailboxer(name="wes", temp=True)
@@ -29,15 +32,15 @@ def test_postman(seeder):
 
         recpIcp = recpHab.makeOwnEvent(sn=0)
         wesKvy = eventing.Kevery(db=wesHab.db, lax=False, local=False)
-        parsing.Parser().parse(ims=bytearray(recpIcp), kvy=wesKvy)
+        parsing.Parser().parse(ims=bytearray(recpIcp), kvy=wesKvy, local=True)
         assert recpHab.pre in wesKvy.kevers
 
         serder = serdering.SerderKERI(raw=recpIcp)
         rct = wesHab.receipt(serder)
 
         kvy = eventing.Kevery(db=hab.db)
-        parsing.Parser().parseOne(bytearray(recpIcp), kvy=kvy)
-        parsing.Parser().parseOne(bytearray(rct), kvy=kvy)
+        parsing.Parser().parseOne(bytearray(recpIcp), kvy=kvy, local=True)
+        parsing.Parser().parseOne(bytearray(rct), kvy=kvy, local=True)
         kvy.processEscrows()
         assert recpHab.pre in kvy.kevers
 
@@ -65,7 +68,7 @@ def test_postman(seeder):
         doist.exit()
 
         msgs = []
-        for _, topic, msg in mbx.cloneTopicIter(topic=recpHab.pre + "/echo", fn=0):
+        for _, topic, msg in mbx.cloneTopicIter(topic=recpHab.pre + "/echo"):
             msgs.append(msg)
 
         assert len(msgs) == 1

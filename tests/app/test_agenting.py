@@ -7,20 +7,20 @@ import time
 
 from hio.base import doing, tyming
 
-from keri import kering
+from keri import kering, core
 from keri.core import coring, serdering
-from keri.core.coring import Counter, CtrDex, Seqner
+from keri.core.coring import Seqner
 from keri.help import nowIso8601
 from keri.app import habbing, indirecting, agenting, directing
-from keri.db import dbing
+from keri.db import basing, dbing
 from keri.vdr import eventing, viring
 
 
-def test_withness_receiptor(seeder):
-    with habbing.openHby(name="wan", salt=coring.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
-            habbing.openHby(name="wil", salt=coring.Salter(raw=b'will-the-witness').qb64) as wilHby, \
-            habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
-            habbing.openHby(name="pal", salt=coring.Salter(raw=b'0123456789abcdef').qb64) as palHby:
+def test_witness_receiptor(seeder):
+    with habbing.openHby(name="wan", salt=core.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
+            habbing.openHby(name="wil", salt=core.Salter(raw=b'will-the-witness').qb64) as wilHby, \
+            habbing.openHby(name="wes", salt=core.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
+            habbing.openHby(name="pal", salt=core.Salter(raw=b'0123456789abcdef').qb64) as palHby:
 
         wanDoers = indirecting.setupWitness(alias="wan", hby=wanHby, tcpPort=5632, httpPort=5642)
         wilDoers = indirecting.setupWitness(alias="wil", hby=wilHby, tcpPort=5633, httpPort=5643)
@@ -60,7 +60,7 @@ class ReceiptDoer(doing.DoDoer):
 
         super(ReceiptDoer, self).__init__(doers=[doing.doify(self.testDo)])
 
-    def testDo(self, tymth, tock=0.0):
+    def testDo(self, tymth, tock=0.0, **kwa):
         """ Execute a series of kli commands for this test scenario """
         # enter context
         self.wind(tymth)
@@ -113,14 +113,14 @@ class ReceiptDoer(doing.DoDoer):
 
 
 def test_witness_sender(seeder):
-    with habbing.openHby(name="wan", salt=coring.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
-            habbing.openHby(name="wil", salt=coring.Salter(raw=b'will-the-witness').qb64) as wilHby, \
-            habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
-            habbing.openHby(name="pal", salt=coring.Salter(raw=b'0123456789abcdef').qb64) as palHby:
+    with habbing.openHby(name="wan", salt=core.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
+            habbing.openHby(name="wil", salt=core.Salter(raw=b'will-the-witness').qb64) as wilHby, \
+            habbing.openHby(name="wes", salt=core.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
+            habbing.openHby(name="pal", salt=core.Salter(raw=b'0123456789abcdef').qb64) as palHby:
 
         # looks like bad magic value in seeder is causing this to fail
         pdoer = PublishDoer(wanHby, wilHby, wesHby, palHby, seeder)
-        directing.runController(doers=[pdoer], expire=15.0)
+        directing.runController(doers=[pdoer], expire=10.0)
         assert pdoer.done is True
 
 
@@ -130,6 +130,12 @@ class PublishDoer(doing.DoDoer):
         wanDoers = indirecting.setupWitness(alias="wan", hby=wanHby, tcpPort=5632, httpPort=5642)
         wilDoers = indirecting.setupWitness(alias="wil", hby=wilHby, tcpPort=5633, httpPort=5643)
         wesDoers = indirecting.setupWitness(alias="wes", hby=wesHby, tcpPort=5634, httpPort=5644)
+        # Pull the regers out of the Doers so the regers are reused and do not trigger an LMDB error on reuse
+        self.regers = dict(
+            wan=next(doer.baser for doer in wanDoers if isinstance(doer, basing.BaserDoer)),
+            wil=next(doer.baser for doer in wilDoers if isinstance(doer, basing.BaserDoer)),
+            wes=next(doer.baser for doer in wesDoers if isinstance(doer, basing.BaserDoer)),
+        )
 
         wanHab = wanHby.habByName(name="wan")
         wilHab = wilHby.habByName(name="wil")
@@ -145,7 +151,7 @@ class PublishDoer(doing.DoDoer):
 
         super(PublishDoer, self).__init__(doers=doers)
 
-    def testDo(self, tymth, tock=0.0):
+    def testDo(self, tymth, tock=0.0, **kwa):
         """ Run the test and exit and remove all child doers when done """
         self.wind(tymth)
         self.tock = tock
@@ -155,7 +161,8 @@ class PublishDoer(doing.DoDoer):
         serder = eventing.issue(vcdig=regser.pre,
                                 regk="EbA1o_bItVC9i6YB3hr2C3I_Gtqvz02vCmavJNoBA3Jg")
         msg = bytearray(serder.raw)
-        msg.extend(Counter(CtrDex.SealSourceCouples, count=1).qb64b)
+        msg.extend(core.Counter(core.Codens.SealSourceCouples, count=1,
+                                gvrsn=kering.Vrsn_1_0).qb64b)
         msg.extend(Seqner(sn=self.palHab.kever.sn).qb64b)
         msg.extend(self.palHab.kever.serder.saidb)
 
@@ -169,7 +176,7 @@ class PublishDoer(doing.DoDoer):
         assert cue["msg"] == msg
 
         for name in ["wes", "wil", "wan"]:
-            reger = viring.Reger(name=name)
+            reger = self.regers[name]
             while True:
                 raw = reger.getTvt(dbing.dgKey(serder.preb, serder.saidb))
                 if raw:
@@ -183,11 +190,11 @@ class PublishDoer(doing.DoDoer):
 
 
 def test_witness_inquisitor(mockHelpingNowUTC, seeder):
-    with habbing.openHby(name="wan", salt=coring.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
-            habbing.openHby(name="wil", salt=coring.Salter(raw=b'will-the-witness').qb64) as wilHby, \
-            habbing.openHby(name="wes", salt=coring.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
-            habbing.openHby(name="pal", salt=coring.Salter(raw=b'0123456789abcdef').qb64) as palHby, \
-            habbing.openHby(name="qin", salt=coring.Salter(raw=b'abcdef0123456789').qb64) as qinHby:
+    with habbing.openHby(name="wan", salt=core.Salter(raw=b'wann-the-witness').qb64) as wanHby, \
+            habbing.openHby(name="wil", salt=core.Salter(raw=b'will-the-witness').qb64) as wilHby, \
+            habbing.openHby(name="wes", salt=core.Salter(raw=b'wess-the-witness').qb64) as wesHby, \
+            habbing.openHby(name="pal", salt=core.Salter(raw=b'0123456789abcdef').qb64) as palHby, \
+            habbing.openHby(name="qin", salt=core.Salter(raw=b'abcdef0123456789').qb64) as qinHby:
         wanDoers = indirecting.setupWitness(alias="wan", hby=wanHby, tcpPort=5632, httpPort=5642)
         wilDoers = indirecting.setupWitness(alias="wil", hby=wilHby, tcpPort=5633, httpPort=5643)
         wesDoers = indirecting.setupWitness(alias="wes", hby=wesHby, tcpPort=5634, httpPort=5644)

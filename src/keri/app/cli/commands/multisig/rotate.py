@@ -27,7 +27,7 @@ parser.add_argument('--name', '-n', help='Human readable reference', required=Tr
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the local identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument("--smids", "-s", help="List of other participant qb64 identifiers with signing authority in "
                                           "rotation event",
@@ -44,7 +44,7 @@ def rotateGroupIdentifier(args):
     Performs a rotation on the group identifier specified as an argument.  The identifier prefix of the environment
     represented by the name parameter must be a member of the group identifier.  This command will perform a rotation
     of the local identifier if the sequence number of the local identifier is the same as the group identifier sequence
-    number.  It will wait for all other members of the group to acheive the same sequence number (group + 1) and then
+    number.  It will wait for all other members of the group to achieve the same sequence number (group + 1) and then
     publish the signed rotation event for the group identifier to all witnesses and wait for receipts.
 
     Parameters:
@@ -203,9 +203,9 @@ class GroupMultisigRotate(doing.DoDoer):
 
         prefixer = coring.Prefixer(qb64=ghab.pre)
         seqner = coring.Seqner(sn=ghab.kever.sn+1)
-        rot = ghab.rotate(smids=smids, rmids=rmids, isith=self.isith, nsith=self.nsith,
+        rot = ghab.rotate(isith=self.isith, nsith=self.nsith,
                           toad=self.toad, cuts=list(self.cuts), adds=list(self.adds), data=self.data,
-                          verfers=merfers, digers=migers)
+                          verfers=merfers, digers=migers, smids=smids, rmids=rmids)
 
         rserder = serdering.SerderKERI(raw=rot)
         # Create a notification EXN message to send to the other agents
@@ -233,8 +233,8 @@ class GroupMultisigRotate(doing.DoDoer):
 
             yield self.tock
 
-        if ghab.kever.delegator:
-            yield from self.postman.sendEvent(hab=ghab, fn=ghab.kever.sn)
+        if ghab.kever.delpre:
+            yield from self.postman.sendEventToDelegator(hab=ghab, sender=ghab.mhab, fn=ghab.kever.sn)
 
         print()
         displaying.printIdentifier(self.hby, ghab.pre)

@@ -12,6 +12,7 @@ import keri.app.oobiing
 from keri.app import habbing, oobiing
 from keri.app.cli.common import existing
 from keri.db import basing
+from keri.end import ending
 from keri.help import helping
 
 logger = help.ogler.getLogger()
@@ -33,7 +34,7 @@ parser.add_argument('--force', action="store_true", required=False,
 
 # Parameters for Manager access
 # passcode => bran
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)
 
 
@@ -80,7 +81,7 @@ class OobiDoer(doing.DoDoer):
 
         super(OobiDoer, self).__init__(doers=doers)
 
-    def waitDo(self, tymth, tock=0.0):
+    def waitDo(self, tymth, tock=0.0, **kwa):
         """ Waits for oobis to load
 
         Parameters:
@@ -106,6 +107,11 @@ class OobiDoer(doing.DoDoer):
             yield 0.25
 
         obr = self.obi.hby.db.roobi.get(keys=(self.oobi,))
+        if self.force:
+            while obr.cid not in self.hby.kevers:
+                self.hby.kvy.processEscrows()
+                yield 0.25
+
         print(self.oobi, obr.state)
 
         self.remove([self.hbyDoer, *self.obi.doers, *self.authn.doers])

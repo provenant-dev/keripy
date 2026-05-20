@@ -29,7 +29,7 @@ parser.add_argument("--proxy", help="alias for delegation communication proxy", 
 parser.add_argument('--file', '-f', help='Filename to use to create the identifier', default="", required=False)
 
 # Authentication for keystore
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--aeid', help='qualified base64 of non-transferable identifier prefix for  authentication '
                                    'and encryption of secrets in keystore', default=None)
@@ -117,6 +117,8 @@ def mergeArgsWithFile(args):
         incept_opts.estOnly = args.est_only
     if args.data is not None:
         incept_opts.data = config.parseData(args.data)
+    if args.delpre is not None:
+        incept_opts.delpre = args.delpre
 
     return incept_opts
 
@@ -136,20 +138,19 @@ class InceptDoer(doing.DoDoer):
                                     reopen=True,
                                     clear=False)
         self.endpoint = endpoint
-        self.proxy = proxy
-        hby = existing.setupHby(name=name, base=base, bran=bran, cf=cf)
-        self.hbyDoer = habbing.HaberyDoer(habery=hby)  # setup doer
-        self.swain = delegating.Sealer(hby=hby)
-        self.postman = forwarding.Poster(hby=hby)
-        self.mbx = indirecting.MailboxDirector(hby=hby, topics=['/receipt', "/replay", "/reply"])
+        self.hby = existing.setupHby(name=name, base=base, bran=bran, cf=cf)
+        self.proxy = self.hby.habByName(proxy) if proxy is not None else None
+        self.hbyDoer = habbing.HaberyDoer(habery=self.hby)  # setup doer
+        self.swain = delegating.Anchorer(hby=self.hby, proxy=self.proxy)
+        self.postman = forwarding.Poster(hby=self.hby)
+        self.mbx = indirecting.MailboxDirector(hby=self.hby, topics=['/receipt', "/replay", "/reply"])
         doers = [self.hbyDoer, self.postman, self.mbx, self.swain, doing.doify(self.inceptDo)]
 
         self.inits = kwa
         self.alias = alias
-        self.hby = hby
         super(InceptDoer, self).__init__(doers=doers)
 
-    def inceptDo(self, tymth, tock=0.0):
+    def inceptDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of
@@ -168,8 +169,8 @@ class InceptDoer(doing.DoDoer):
         receiptor = agenting.Receiptor(hby=self.hby)
         self.extend([witDoer, receiptor])
 
-        if hab.kever.delegator:
-            self.swain.delegation(pre=hab.pre, sn=0, proxy=self.hby.habByName(self.proxy))
+        if hab.kever.delpre:
+            self.swain.delegation(pre=hab.pre, sn=0)
             print("Waiting for delegation approval...")
             while not self.swain.complete(hab.kever.prefixer, coring.Seqner(sn=hab.kever.sn)):
                 yield self.tock
@@ -183,8 +184,12 @@ class InceptDoer(doing.DoDoer):
                 while not witDoer.cues:
                     _ = yield self.tock
 
-        if hab.kever.delegator:
-            yield from self.postman.sendEvent(hab=hab, fn=hab.kever.sn)
+        if hab.kever.delpre:
+            if self.proxy is not None:
+                sender = self.proxy
+            else:
+                sender = hab
+            yield from self.postman.sendEventToDelegator(hab=hab, sender=sender, fn=hab.kever.sn)
 
         print(f'Prefix  {hab.pre}')
         for idx, verfer in enumerate(hab.kever.verfers):

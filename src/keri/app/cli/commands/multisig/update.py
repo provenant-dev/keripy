@@ -8,6 +8,7 @@ import time
 
 from keri import help
 from hio.base import doing
+from hio.help import decking
 
 from keri import kering
 from keri.app import agenting, indirecting, habbing
@@ -27,7 +28,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the new iden
 parser.add_argument('--witness', '-w', help='QB64 identifier of witness to query', default="", required=True)
 
 # Authentication for keystore
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--aeid', help='qualified base64 of non-transferable identifier prefix for  authentication '
                                    'and encryption of secrets in keystore', default=None)
@@ -60,7 +61,7 @@ class UpdateDoer(doing.DoDoer):
         self.wit = wit
         self.sn = sn
         self.said = said
-        self.cues = help.decking.Deck()
+        self.cues = decking.Deck()
 
         self.mbd = indirecting.MailboxDirector(hby=self.hby, topics=["/replay", "/receipt", "/reply"])
         self.witq = agenting.WitnessInquisitor(hby=self.hby)

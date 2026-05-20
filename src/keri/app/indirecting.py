@@ -19,10 +19,11 @@ from hio.core.tcp import serving
 from hio.help import decking
 
 import keri.app.oobiing
-from . import directing, storing, httping, forwarding, agenting, oobiing
+from . import directing, storing, httping, forwarding, agenting, oobiing, tocking
 from .habbing import GroupHab
 from .. import help, kering
-from ..core import eventing, parsing, routing, coring, serdering
+from ..core import (eventing, parsing, routing, coring, serdering,
+                    Counter, Codens)
 from ..core.coring import Ilks
 from ..db import basing, dbing
 from ..end import ending
@@ -30,6 +31,7 @@ from ..help import helping
 from ..peer import exchanging
 from ..vdr import verifying, viring
 from ..vdr.eventing import Tevery
+from ..metric import EscrowEnd
 
 logger = help.ogler.getLogger()
 
@@ -40,6 +42,7 @@ def setupWitness(hby, alias="witness", mbx=None, aids=None, tcpPort=5631, httpPo
     Setup witness controller and doers
 
     """
+    host = "0.0.0.0"
     cues = decking.Deck()
     doers = []
 
@@ -86,16 +89,18 @@ def setupWitness(hby, alias="witness", mbx=None, aids=None, tcpPort=5631, httpPo
     app.add_route("/", httpEnd)
     receiptEnd = ReceiptEnd(hab=hab, inbound=cues, aids=aids)
     app.add_route("/receipts", receiptEnd)
-    queryEnd = QueryEnd(hab=hab)
+    queryEnd = QueryEnd(hab=hab, reger=reger)
     app.add_route("/query", queryEnd)
+    metricsEnd = EscrowEnd(hby=hby, reger=reger)
+    app.add_route("/metrics", metricsEnd)
 
-    server = createHttpServer(httpPort, app, keypath, certpath, cafilepath)
+    server = createHttpServer(host, httpPort, app, keypath, certpath, cafilepath)
     if not server.reopen():
         raise RuntimeError(f"cannot create http server on port {httpPort}")
     httpServerDoer = http.ServerDoer(server=server)
 
     # setup doers
-    regDoer = basing.BaserDoer(baser=verfer.reger)
+    regDoer = basing.BaserDoer(baser=reger)
 
     if tcpPort is not None:
         server = serving.Server(host="", port=tcpPort)
@@ -114,12 +119,13 @@ def setupWitness(hby, alias="witness", mbx=None, aids=None, tcpPort=5631, httpPo
     return doers
 
 
-def createHttpServer(port, app, keypath=None, certpath=None, cafilepath=None):
+def createHttpServer(host, port, app, keypath=None, certpath=None, cafilepath=None):
     """
     Create an HTTP or HTTPS server depending on whether TLS key material is present
     Parameters:
+        host(str)          : host to bind to for this server, or None for default of '0.0.0.0', all ifaces
         port (int)         : port to listen on for all HTTP(s) server instances
-        app (falcon.App)   : application instance to pass to the http.Server instance
+        app (Any)          : WSGI application instance to pass to the http.Server instance
         keypath (string)   : the file path to the TLS private key
         certpath (string)  : the file path to the TLS signed certificate (public key)
         cafilepath (string): the file path to the TLS CA certificate chain file
@@ -132,9 +138,9 @@ def createHttpServer(port, app, keypath=None, certpath=None, cafilepath=None):
                                 certpath=certpath,
                                 cafilepath=cafilepath,
                                 port=port)
-        server = http.Server(port=port, app=app, servant=servant)
+        server = http.Server(host=host, port=port, app=app, servant=servant)
     else:
-        server = http.Server(port=port, app=app)
+        server = http.Server(host=host, port=port, app=app)
     return server
 
 
@@ -158,7 +164,7 @@ class WitnessStart(doing.DoDoer):
         doers = [doing.doify(self.start), doing.doify(self.msgDo), doing.doify(self.escrowDo), doing.doify(self.cueDo)]
         super().__init__(doers=doers, **opts)
 
-    def start(self, tymth=None, tock=0.0):
+    def start(self, tymth=None, tock=0.0, **kwa):
         """ Prints witness name and prefix
 
         Parameters:
@@ -176,7 +182,7 @@ class WitnessStart(doing.DoDoer):
 
         print("Witness", self.hab.name, ":", self.hab.pre)
 
-    def msgDo(self, tymth=None, tock=0.0):
+    def msgDo(self, tymth=None, tock=None, **kwa):
         """
         Returns doifiable Doist compatibile generator method (doer dog) to process
             incoming message stream of .kevery
@@ -190,15 +196,15 @@ class WitnessStart(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.WitnessMsgTock
         _ = (yield self.tock)
 
         if self.parser.ims:
-            logger.info("Client %s received:\n%s\n...\n", self.kvy, self.parser.ims[:1024])
-        done = yield from self.parser.parsator()  # process messages continuously
+            logger.debug("Client %s received:\n%s\n...\n", self.kvy, self.parser.ims[:1024])
+        done = yield from self.parser.parsator(local=True)  # process messages continuously
         return done  # should nover get here except forced close
 
-    def escrowDo(self, tymth=None, tock=0.0):
+    def escrowDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             .kevery and .tevery escrows.
@@ -212,7 +218,7 @@ class WitnessStart(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.WitnessEscrowTock
         _ = (yield self.tock)
 
         while True:
@@ -222,9 +228,9 @@ class WitnessStart(doing.DoDoer):
                 self.tvy.processEscrows()
             self.exc.processEscrow()
 
-            yield
+            yield self.tock
 
-    def cueDo(self, tymth=None, tock=0.0):
+    def cueDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             .kevery.cues deque
@@ -243,12 +249,12 @@ class WitnessStart(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.WitnessCueTock
         _ = (yield self.tock)
 
         while True:
             while self.cues:
-                cue = self.cues.pull() # self.cues.popleft()
+                cue = self.cues.pull()  # self.cues.popleft()
                 cueKin = cue["kin"]
                 if cueKin == "stream":
                     self.queries.append(cue)
@@ -360,7 +366,7 @@ class Indirector(doing.DoDoer):
         super(Indirector, self).wind(tymth)
         self.client.wind(tymth)
 
-    def msgDo(self, tymth=None, tock=0.0):
+    def msgDo(self, tymth=None, tock=None, **kwa):
         """
         Returns doifiable Doist compatibile generator method (doer dog) to process
             incoming message stream of .kevery
@@ -379,15 +385,15 @@ class Indirector(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.IndirectorMsgTock
         _ = (yield self.tock)
 
         if self.parser.ims:
-            logger.info("Client %s received:\n%s\n...\n", self.hab.pre, self.parser.ims[:1024])
-        done = yield from self.parser.parsator()  # process messages continuously
+            logger.debug("Client %s received:\n%s\n...\n", self.hab.pre, self.parser.ims[:1024])
+        done = yield from self.parser.parsator(local=True)  # process messages continuously
         return done  # should nover get here except forced close
 
-    def cueDo(self, tymth=None, tock=0.0):
+    def cueDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             .kevery.cues deque
@@ -406,16 +412,16 @@ class Indirector(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.IndirectorCueTock
         _ = (yield self.tock)
 
         while True:
             for msg in self.hab.processCuesIter(self.kevery.cues):
                 self.sendMessage(msg, label="chit or receipt")
-                yield  # throttle just do one cue at a time
-            yield
+                yield self.tock  # throttle just do one cue at a time
+            yield self.tock
 
-    def escrowDo(self, tymth=None, tock=0.0):
+    def escrowDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             .kevery escrows.
@@ -434,19 +440,19 @@ class Indirector(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.IndirectorEscrowTock
         _ = (yield self.tock)
 
         while True:
             self.kevery.processEscrows()
-            yield
+            yield self.tock
 
     def sendMessage(self, msg, label=""):
         """
         Sends message msg and loggers label if any
         """
         self.client.tx(msg)  # send to remote
-        logger.info("%s sent %s:\n%s\n\n", self.hab.pre, label, bytes(msg))
+        logger.debug("%s sent %s:\n%s\n\n", self.hab.pre, label, bytes(msg))
 
 
 class MailboxDirector(doing.DoDoer):
@@ -476,13 +482,11 @@ class MailboxDirector(doing.DoDoer):
         hby (Habitat: local controller's context
 
     Properties:
-        tyme (float): relative cycle time of associated Tymist, obtained
-            via injected .tymth function wrapper closure.
-        tymth (function): function wrapper closure returned by Tymist .tymeth()
-            method.  When .tymth is called it returns associated Tymist .tyme.
-            .tymth provides injected dependency on Tymist tyme base.
-        tock (float): desired time in seconds between runs or until next run,
-            non negative, zero means run asap
+        hby (Habery): the Habery in which mailbox messages are routed
+        verifier (Verifier): TEL event acceptor and validator
+        exchanger (Exchanger): Exchange (exn) message delivery component
+        rep (Respondant): Respondant for reply messages
+        cues (Deck): Queue for new actions to schedule shared between the Revery, Kevery (and Kever), and Tevery (and Tever)
 
 
     Methods:
@@ -506,7 +510,7 @@ class MailboxDirector(doing.DoDoer):
     """
 
     def __init__(self, hby, topics, ims=None, verifier=None, kvy=None, exc=None, rep=None, cues=None, rvy=None,
-                 tvy=None, **kwa):
+                 tvy=None, witnesses=True, **kwa):
         """
         Initialize instance.
 
@@ -530,6 +534,7 @@ class MailboxDirector(doing.DoDoer):
         self.pollers = list()
         self.prefixes = oset()
         self.cues = cues if cues is not None else decking.Deck()
+        self.witnesses = witnesses
 
         self.ims = ims if ims is not None else bytearray()
 
@@ -576,7 +581,7 @@ class MailboxDirector(doing.DoDoer):
         """
         super(MailboxDirector, self).wind(tymth)
 
-    def pollDo(self, tymth=None, tock=0.0):
+    def pollDo(self, tymth=None, tock=None, **kwa):
         """
         Returns:
            doifiable Doist compatible generator method
@@ -586,7 +591,7 @@ class MailboxDirector(doing.DoDoer):
         """
         # enter context
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.MailboxPollTock
         _ = (yield self.tock)
 
         habs = list(self.hby.habs.values())
@@ -622,11 +627,12 @@ class MailboxDirector(doing.DoDoer):
                 self.pollers.append(poller)
                 self.extend([poller])
 
-        wits = hab.kever.wits
-        for wit in wits:
-            poller = Poller(hab=hab, topics=self.topics, witness=wit)
-            self.pollers.append(poller)
-            self.extend([poller])
+        if self.witnesses:
+            wits = hab.kever.wits
+            for wit in wits:
+                poller = Poller(hab=hab, topics=self.topics, witness=wit)
+                self.pollers.append(poller)
+                self.extend([poller])
 
         self.prefixes.add(hab.pre)
 
@@ -653,7 +659,7 @@ class MailboxDirector(doing.DoDoer):
             msg = mail.pop(0)
             yield msg
 
-    def msgDo(self, tymth=None, tock=0.0):
+    def msgDo(self, tymth=None, tock=None, **kwa):
         """
         Returns doifiable Doist compatibile generator method (doer dog) to process
             incoming message stream of .kevery
@@ -672,13 +678,13 @@ class MailboxDirector(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.MailboxMsgTock
         _ = (yield self.tock)
 
-        done = yield from self.parser.parsator()  # process messages continuously
+        done = yield from self.parser.parsator(local=True)  # process messages continuously
         return done  # should nover get here except forced close
 
-    def escrowDo(self, tymth=None, tock=0.0):
+    def escrowDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             .kevery escrows.
@@ -697,7 +703,7 @@ class MailboxDirector(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.MailboxEscrowTock
         _ = (yield self.tock)
 
         while True:
@@ -710,7 +716,7 @@ class MailboxDirector(doing.DoDoer):
             if self.verifier is not None:
                 self.verifier.processEscrows()
 
-            yield
+            yield self.tock
 
     @property
     def times(self):
@@ -751,7 +757,7 @@ class Poller(doing.DoDoer):
 
         super(Poller, self).__init__(doers=doers, **kwa)
 
-    def eventDo(self, tymth=None, tock=0.0):
+    def eventDo(self, tymth=None, tock=None, **kwa):
         """
         Returns:
            doifiable Doist compatible generator method
@@ -760,7 +766,7 @@ class Poller(doing.DoDoer):
             add result of doify on this method to doers list
         """
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.PollerEventTock
         _ = (yield self.tock)
 
         witrec = self.hab.db.tops.get((self.pre, self.witness))
@@ -891,7 +897,7 @@ class HttpEnd:
         rep.set_header('connection', "close")
 
         cr = httping.parseCesrHttpRequest(req=req)
-        sadder = coring.Sadder(ked=cr.payload, kind=eventing.Serials.json)
+        sadder = coring.Sadder(ked=cr.payload, kind=eventing.Kinds.json)
         msg = bytearray(sadder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
 
@@ -971,7 +977,7 @@ class QryRpyMailboxIterable:
     def __next__(self):
         if self.iter is None:
             if self.cues:
-                cue = self.cues.pull() # self.cues.popleft()
+                cue = self.cues.pull()
                 serder = cue["serder"]
                 if serder.said == self.said:
                     kin = cue["kin"]
@@ -1061,7 +1067,7 @@ class ReceiptEnd(doing.DoDoer):
         rep.set_header('connection', "close")
 
         cr = httping.parseCesrHttpRequest(req=req)
-        serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Serials.json)
+        serder = serdering.SerderKERI(sad=cr.payload, kind=eventing.Kinds.json)
 
         pre = serder.ked["i"]
         if self.aids is not None and pre not in self.aids:
@@ -1074,7 +1080,7 @@ class ReceiptEnd(doing.DoDoer):
         msg = bytearray(serder.raw)
         msg.extend(cr.attachments.encode("utf-8"))
 
-        self.psr.parseOne(ims=msg)
+        self.psr.parseOne(ims=msg, local=True)
 
         if pre in self.hab.kevers:
             kever = self.hab.kevers[pre]
@@ -1140,8 +1146,8 @@ class ReceiptEnd(doing.DoDoer):
                                    said=said.decode("utf-8"))
         rct = bytearray(rserder.raw)
         if wigs := self.hab.db.getWigs(key=dgkey):
-            rct.extend(coring.Counter(code=coring.CtrDex.WitnessIdxSigs,
-                                      count=len(wigs)).qb64b)
+            rct.extend(Counter(Codens.WitnessIdxSigs, count=len(wigs),
+                               gvrsn=kering.Vrsn_1_0).qb64b)
             for wig in wigs:
                 rct.extend(wig)
 
@@ -1149,7 +1155,7 @@ class ReceiptEnd(doing.DoDoer):
         rep.status = falcon.HTTP_200
         rep.data = rct
 
-    def interceptDo(self, tymth=None, tock=0.0):
+    def interceptDo(self, tymth=None, tock=None, **kwa):
         """
          Returns doifiable Doist compatibile generator method (doer dog) to process
             Kevery and Tevery cues deque
@@ -1159,7 +1165,7 @@ class ReceiptEnd(doing.DoDoer):
         """
         # enter context
         self.wind(tymth)
-        self.tock = tock
+        self.tock = tock if tock is not None else tocking.ReceiptInterceptTock
         _ = (yield self.tock)
 
         while True:
@@ -1187,9 +1193,9 @@ class QueryEnd:
 
      """
 
-    def __init__(self, hab):
+    def __init__(self, hab, reger):
         self.hab = hab
-        self.reger = viring.Reger(name=hab.name, db=hab.db, temp=False)
+        self.reger = reger
    
     def on_get(self, req, rep):
         """ Handles GET requests to query KEL or TEL events of a pre from a witness.

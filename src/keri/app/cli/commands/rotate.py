@@ -11,6 +11,7 @@ from hio.base import doing
 from keri import kering
 from keri.app.cli.common import rotating, existing, config
 from keri.core import coring
+from keri.help import helping
 from ... import habbing, agenting, indirecting, delegating, forwarding
 
 parser = argparse.ArgumentParser(description='Rotate keys')
@@ -19,14 +20,20 @@ parser.add_argument('--name', '-n', help='keystore name and file location of KER
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the new identifier prefix', required=True)
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 parser.add_argument('--file', '-f', help='file path of config options (JSON) for rotation', default="", required=False)
 parser.add_argument('--next-count', '-C', help='Count of pre-rotated keys (signing keys after next rotation).',
                     default=None, type=int, required=False)
 parser.add_argument("--receipt-endpoint", help="Attempt to connect to witness receipt endpoint for witness receipts.",
                     dest="endpoint", action='store_true')
-parser.add_argument("--proxy", help="alias for delegation communication proxy", default="")
+parser.add_argument("--authenticate", '-z', help="Prompt the controller for authentication codes for each witness",
+                    action='store_true')
+parser.add_argument('--code', help='<Witness AID>:<code> formatted witness auth codes.  Can appear multiple times',
+                    default=[], action="append", required=False)
+parser.add_argument('--code-time', help='Time the witness codes were captured.', default=None, required=False)
+
+parser.add_argument("--proxy", help="alias for delegation communication proxy", default=None)
 
 rotating.addRotationArgs(parser)
 
@@ -60,7 +67,8 @@ def rotate(args):
                          cuts=opts.witsCut, adds=opts.witsAdd,
                          isith=opts.isith, nsith=opts.nsith,
                          count=opts.ncount, toad=opts.toad,
-                         data=opts.data, proxy=args.proxy)
+                         data=opts.data, proxy=args.proxy, authenticate=args.authenticate,
+                         codes=args.code, codeTime=args.code_time)
 
     doers = [rotDoer]
 
@@ -115,7 +123,8 @@ class RotateDoer(doing.DoDoer):
     """
 
     def __init__(self, name, base, bran, alias, endpoint=False, isith=None, nsith=None, count=None,
-                 toad=None, wits=None, cuts=None, adds=None, data: list = None, proxy=None):
+                 toad=None, wits=None, cuts=None, adds=None, data: list = None, proxy=None, authenticate=False,
+                 codes=None, codeTime=None):
         """
         Returns DoDoer with all registered Doers needed to perform rotation.
 
@@ -139,7 +148,9 @@ class RotateDoer(doing.DoDoer):
         self.toad = toad
         self.data = data
         self.endpoint = endpoint
-        self.proxy = proxy
+        self.authenticate = authenticate
+        self.codes = codes if codes is not None else []
+        self.codeTime = codeTime
 
         self.wits = wits if wits is not None else []
         self.cuts = cuts if cuts is not None else []
@@ -147,14 +158,16 @@ class RotateDoer(doing.DoDoer):
 
         self.hby = existing.setupHby(name=name, base=base, bran=bran)
         self.hbyDoer = habbing.HaberyDoer(habery=self.hby)  # setup doer
-        self.swain = delegating.Sealer(hby=self.hby)
+
+        self.proxy = self.hby.habByName(proxy) if proxy is not None else None
+        self.swain = delegating.Anchorer(hby=self.hby, proxy=self.proxy)
         self.postman = forwarding.Poster(hby=self.hby)
         self.mbx = indirecting.MailboxDirector(hby=self.hby, topics=['/receipt', "/replay", "/reply"])
         doers = [self.hbyDoer, self.mbx, self.swain, self.postman, doing.doify(self.rotateDo)]
 
         super(RotateDoer, self).__init__(doers=doers)
 
-    def rotateDo(self, tymth, tock=0.0):
+    def rotateDo(self, tymth, tock=0.0, **kwa):
         """
         Returns:  doifiable Doist compatible generator method
         Usage:
@@ -187,21 +200,34 @@ class RotateDoer(doing.DoDoer):
                    cuts=list(self.cuts), adds=list(self.adds),
                    data=self.data)
 
-        if hab.kever.delegator:
-            self.swain.delegation(pre=hab.pre, sn=hab.kever.sn, proxy=self.hby.habByName(self.proxy))
+        auths = {}
+        if self.authenticate:
+            codeTime = helping.fromIso8601(self.codeTime) if self.codeTime is not None else helping.nowIso8601()
+            for arg in self.codes:
+                (wit, code) = arg.split(":")
+                auths[wit] = f"{code}#{codeTime}"
+
+            for wit in hab.kever.wits:
+                if wit in auths:
+                    continue
+                code = input(f"Enter code for {wit}: ")
+                auths[wit] = f"{code}#{helping.nowIso8601()}"
+
+        if hab.kever.delpre:
+            self.swain.delegation(pre=hab.pre, sn=hab.kever.sn, auths=auths, proxy=self.proxy)
             print("Waiting for delegation approval...")
             while not self.swain.complete(hab.kever.prefixer, coring.Seqner(sn=hab.kever.sn)):
                 yield self.tock
 
         elif hab.kever.wits:
             if self.endpoint:
-                yield from receiptor.receipt(hab.pre, sn=hab.kever.sn)
+                yield from receiptor.receipt(hab.pre, sn=hab.kever.sn, auths=auths)
             else:
                 for wit in self.adds:
                     self.mbx.addPoller(hab, witness=wit)
 
                 print("Waiting for witness receipts...")
-                witDoer = agenting.WitnessReceiptor(hby=self.hby)
+                witDoer = agenting.WitnessReceiptor(hby=self.hby, auths=auths)
                 self.extend(doers=[witDoer])
                 yield self.tock
 
@@ -211,8 +237,12 @@ class RotateDoer(doing.DoDoer):
 
                 self.remove([witDoer])
 
-        if hab.kever.delegator:
-            yield from self.postman.sendEvent(hab=hab, fn=hab.kever.sn)
+        if hab.kever.delpre:
+            if self.proxy is not None:
+                sender = self.proxy
+            else:
+                sender = hab
+            yield from self.postman.sendEventToDelegator(hab=hab, sender=sender, fn=hab.kever.sn)
 
         print(f'Prefix  {hab.pre}')
         print(f'New Sequence No.  {hab.kever.sn}')

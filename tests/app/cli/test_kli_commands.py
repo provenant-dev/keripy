@@ -1,13 +1,20 @@
+import json
 import os
 
 import multicommand
 import pytest
 
-from keri.app import directing, habbing
+
+from keri.kering import ValidationError
+
+from keri import core
+from keri.core import coring
+
+from keri.app import directing
+
 from keri.app.cli import commands
 from keri.app.cli.common import existing
-from keri.core import coring
-from keri.kering import ValidationError
+
 
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -17,7 +24,7 @@ def test_standalone_kli_commands(helpers, capsys):
     assert os.path.isdir("/usr/local/var/keri/ks/test") is False
 
     parser = multicommand.create_parser(commands)
-    salt = coring.Salter(raw=b'0123456789abcdef').qb64
+    salt = core.Salter(raw=b'0123456789abcdef').qb64
     args = parser.parse_args(["init", "--name", "test", "--nopasscode", "--salt", salt])
     assert args.handler is not None
     doers = args.handler(args)
@@ -238,35 +245,44 @@ def test_standalone_kli_commands(helpers, capsys):
     doers = args.handler(args)
     directing.runController(doers=doers)
     capesc = capsys.readouterr()
-    assert capesc.out == ('{\n'
-                          '  "unverified-receipts": 0,\n'
-                          '  "verified-receipts": 0,\n'
-                          '  "partially-signed-events": [],\n'
-                          '  "partially-witnessed-events": [],\n'
-                          '  "unverified-event-indexed-couples": 0,\n'
-                          '  "out-of-order-events": [],\n'
-                          '  "likely-duplicitous-events": [],\n'
-                          '  "query-not-found": 0,\n'
-                          '  "partially-delegated-events": 0,\n'
-                          '  "reply": 0,\n'
-                          '  "failed-oobi": 0,\n'
-                          '  "group-partial-witness": 0,\n'
-                          '  "group-delegate": 0,\n'
-                          '  "delegated-partial-witness": 0,\n'
-                          '  "group-partial-signed": 0,\n'
-                          '  "exchange-partial-signed": 0,\n'
-                          '  "delegated-unanchored": 0,\n'
-                          '  "tel-out-of-order": 0,\n'
-                          '  "tel-partially-witnessed": 0,\n'
-                          '  "tel-anchorless": 0,\n'
-                          '  "missing-registry-escrow": [],\n'
-                          '  "broken-chain-escrow": [],\n'
-                          '  "missing-schema-escrow": [],\n'
-                          '  "tel-missing-signature": 0,\n'
-                          '  "tel-partial-witness-escrow": 0,\n'
-                          '  "tel-multisig": 0,\n'
-                          '  "tel-event-dissemination": 0\n'
-                          '}\n')
+    escrows = ("""{
+              "unverified-receipts": 0,
+              "verified-receipts": 0,
+              "out-of-order-events": [],
+              "partially-witnessed-events": [],
+              "partially-signed-events": [],
+              "likely-duplicitous-events": [],
+              "unverified-event-indexed-couples": 0,
+              "query-not-found": 0,
+              "partially-delegated-events": 0,
+              "reply": 0,
+              "failed-oobi": 0,
+              "group-partial-witness": 0,
+              "group-delegate": 0,
+              "delegated-partial-witness": 0,
+              "group-partial-signed": 0,
+              "exchange-partial-signed": 0,
+              "delegated-unanchored": 0,
+              "tel-out-of-order": 0,
+              "tel-partially-witnessed": 0,
+              "tel-anchorless": 0,
+              "missing-registry-escrow": [],
+              "broken-chain-escrow": [],
+              "missing-schema-escrow": [],
+              "tel-missing-signature": 0,
+              "tel-partial-witness-escrow": 0,
+              "tel-multisig": 0,
+              "tel-event-dissemination": 0,
+              "registry-missing-anchor": 0,
+              "registry-out-of-order": 0,
+              "credential-missing-registry": 0,
+              "credential-missing-anchor": 0,
+              "credential-out-of-order": 0
+            }
+        """)
+    assert json.loads(capesc.out) == json.loads(escrows)
+
+
 
 
 def test_incept_and_rotate_opts(helpers, capsys):
@@ -277,7 +293,7 @@ def test_incept_and_rotate_opts(helpers, capsys):
     assert os.path.isdir("/usr/local/var/keri/ks/test-opts") is False
 
     parser = multicommand.create_parser(commands)
-    salt = coring.Salter(raw=b'0123456789abcdef').qb64
+    salt = core.Salter(raw=b'0123456789abcdef').qb64
     args = parser.parse_args(["init", "--name", "test-opts", "--nopasscode", "--salt", salt])
     assert args.handler is not None
     doers = args.handler(args)

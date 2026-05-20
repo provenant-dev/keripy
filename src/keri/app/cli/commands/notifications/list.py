@@ -7,13 +7,10 @@ keri.kli.commands module
 import argparse
 import json
 
-from keri import help
 from hio.base import doing
-
-from keri import kering
-from keri.app import agenting, habbing, httping, notifying
+from keri import help
+from keri.app import habbing, notifying
 from keri.app.cli.common import existing
-from keri.app.habbing import GroupHab
 
 logger = help.ogler.getLogger()
 
@@ -63,7 +60,7 @@ class NotesDoer(doing.DoDoer):
 
         super(NotesDoer, self).__init__(doers=doers)
 
-    def readDo(self, tymth, tock=0.0):
+    def readDo(self, tymth, tock=0.0, **kwa):
         """
         Parameters:
             tymth (function): injected function wrapper closure returned by .tymen() of

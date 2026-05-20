@@ -29,7 +29,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     default=None)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--verbose", "-V", help="print full JSON of all credentials", action="store_true")
@@ -80,7 +80,7 @@ class ListDoer(doing.DoDoer):
 
         super(ListDoer, self).__init__(doers=doers)
 
-    def listDo(self, tymth, tock=0.0):
+    def listDo(self, tymth, tock=0.0, **kwa):
         """ Check for any credential messages in mailboxes and list all held credentials
 
         Parameters:

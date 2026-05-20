@@ -26,7 +26,7 @@ to get a version string similar to the following:
 ### Local installation - Docker build
 Run `make build-keri` to build your docker image.
 
-Then run `docker run --pull=never -it --entrypoint /bin/bash weboftrust/keri:1.1.33` and you can run `kli version` from within the running container to play with KERIpy.
+Then run `docker run --pull=never -it --entrypoint /bin/bash weboftrust/keri:1.1.10` and you can run `kli version` from within the running container to play with KERIpy.
 
 Make sure the image tag matches the version used in the `Makefile`.
 We use `--pull=never` to ensure that docker does not implicitly pull a remote image and relies on the local image tagged during `make build-keri`.
@@ -34,7 +34,7 @@ We use `--pull=never` to ensure that docker does not implicitly pull a remote im
 ### Dependencies
 #### Binaries
 
-python 3.10.4+
+python 3.12.1+
 libsodium 1.0.18+
 
 
@@ -66,7 +66,7 @@ $ pip3 install -U cbor2
 ## Development
 
 ### Setup
-* Ensure Python 3.10.4 is present along with venv and dev header files;
+* Ensure Python 3.12.1 is present along with venv and dev header files;
 * Setup virtual environment: `python3 -m venv keripy`
 * Activate virtual environment: `source keripy/bin/activate`
 * Setup dependencies: `pip install -r requirements.txt`
@@ -88,3 +88,17 @@ pytest tests/demo/
 * Build with Sphinx in `/docs`: 
   * `$ make html`
 
+## Publishing containers
+
+Enable the containerd image store
+
+The containerd image store isn't enabled by default. To enable the feature for Docker Desktop:
+
+Navigate to Settings in Docker Desktop.
+In the General tab, check Use containerd for pulling and storing images.
+Select Apply & Restart.
+
+```shell
+make build-keri
+make publish-keri
+```

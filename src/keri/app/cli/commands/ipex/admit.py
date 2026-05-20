@@ -25,7 +25,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--said", "-s", help="SAID of the exn grant message to admit", required=True)
@@ -77,7 +77,7 @@ class AdmitDoer(doing.DoDoer):
         self.toRemove = [mbx, self.witq]
         super(AdmitDoer, self).__init__(doers=self.toRemove + [doing.doify(self.admitDo)])
 
-    def admitDo(self, tymth, tock=0.0):
+    def admitDo(self, tymth, tock=0.0, **kwa):
         """ Admit credential by accepting into database and sending /ipex/admit exn message
 
         Parameters:
@@ -108,7 +108,7 @@ class AdmitDoer(doing.DoDoer):
         # Lets get the latest KEL and Registry if needed
         self.witq.query(src=self.hab.pre, pre=issr)
         if "ri" in acdc:
-            self.witq.telquery(src=self.hab.pre, wits=self.hab.kevers[issr].wits, ri=acdc["ri"], i=acdc["d"])
+            self.witq.telquery(src=self.hab.pre, pre=issr, wits=self.hab.kevers[issr].wits, ri=acdc["ri"], i=acdc["d"])
 
         for label in ("anc", "iss", "acdc"):
             ked = embeds[label]

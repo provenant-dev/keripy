@@ -25,7 +25,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--said", "-s", help="SAID of the credential to export.", required=False, default=None)
@@ -78,7 +78,7 @@ class ExportDoer(doing.DoDoer):
 
         super(ExportDoer, self).__init__(doers=doers)
 
-    def exportDo(self, tymth, tock=0.0):
+    def exportDo(self, tymth, tock=0.0, **kwa):
         """ Export credential from store and any related material
 
         Parameters:

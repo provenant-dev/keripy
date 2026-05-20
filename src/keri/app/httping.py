@@ -7,7 +7,7 @@ import datetime
 import json
 from dataclasses import dataclass
 from urllib import parse
-from urllib.parse import urlparse
+from pathlib import Path
 
 import falcon
 from hio.base import doing
@@ -40,7 +40,6 @@ class SignatureValidationComponent(object):
         Parameters:
             req: Http request object
             resp: Http response object
-
 
         """
         sig = req.headers.get("SIGNATURE")
@@ -152,7 +151,7 @@ def createCESRRequest(msg, client, dest, path=None):
     )
 
 
-def streamCESRRequests(client, ims, dest, path=None):
+def streamCESRRequests(client, ims, dest, path=None, headers=None):
     """
     Turns a stream of KERI messages into CESR http requests against the provided hio http Client
 
@@ -167,8 +166,9 @@ def streamCESRRequests(client, ims, dest, path=None):
 
     """
     path = path if path is not None else "/"
+    path = str(Path(client.requester.path) / path)
 
-    cold = parsing.Parser.sniff(ims)  # check for spurious counters at front of stream
+    cold = kering.sniff(ims)  # check for spurious counters at front of stream
     if cold in (parsing.Colds.txt, parsing.Colds.bny):  # not message error out to flush stream
         # replace with pipelining here once CESR message format supported.
         raise kering.ColdStartError("Expecting message counter tritet={}"
@@ -191,17 +191,19 @@ def streamCESRRequests(client, ims, dest, path=None):
 
         body = serder.raw
 
-        headers = Hict([
+        headers = headers if headers is not None else Hict()
+        heads = (Hict([
             ("Content-Type", CESR_CONTENT_TYPE),
             ("Content-Length", len(body)),
             (CESR_ATTACHMENT_HEADER, attachment),
             (CESR_DESTINATION_HEADER, dest)
-        ])
+        ]))
+        heads.update(headers)
 
         client.request(
             method="POST",
             path=path,
-            headers=headers,
+            headers=heads,
             body=body
         )
         cnt += 1
@@ -230,6 +232,9 @@ class Clienter(doing.DoDoer):
             print(f"error establishing client connection={e}")
             return None
 
+        if hasattr(body, "encode"):
+            body = body.encode("utf-8")
+
         client.request(
             method=method,
             path=f"{purl.path}?{purl.query}",
@@ -254,7 +259,7 @@ class Clienter(doing.DoDoer):
         (_, doer, _) = tup
         super(Clienter, self).remove([doer])
 
-    def clientDo(self, tymth, tock=0.0):
+    def clientDo(self, tymth, tock=0.0, **kwa):
         """ Periodically prune stale clients
 
         Process existing clients and prune any that have receieved a response longer than timeout

@@ -26,7 +26,7 @@ parser.add_argument('--alias', '-a', help='human readable alias for the identifi
                     required=True)
 parser.add_argument('--base', '-b', help='additional optional prefix to file location of KERI keystore',
                     required=False, default="")
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 parser.add_argument("--said", "-s", help="SAID of the exn IPEX message to spurn", required=True)
@@ -74,7 +74,7 @@ class SpurnDoer(doing.DoDoer):
         self.toRemove = [mbx]
         super(SpurnDoer, self).__init__(doers=self.toRemove + [doing.doify(self.spurnDo)])
 
-    def spurnDo(self, tymth, tock=0.0):
+    def spurnDo(self, tymth, tock=0.0, **kwa):
         """ Sprun any IPEX message
 
         Parameters:

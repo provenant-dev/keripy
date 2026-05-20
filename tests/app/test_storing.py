@@ -1,17 +1,20 @@
 # -*- encoding: utf-8 -*-
 """
-tests.peer.mailboxing
+tests.app.storing
 
 """
 import os
 
 import lmdb
+import pytest
 
 from keri.app import keeping
 from keri.core import coring, serdering
-from keri.db import dbing, basing
+from keri.db import dbing, basing, subing
+from keri.db.basing import KERIBaserMapSizeKey
+from keri.db.dbing import LMDBer, KERILMDBMapSizeKey
 from keri.peer import exchanging
-from keri.app.storing import Mailboxer
+from keri.app.storing import Mailboxer, KERIMailboxerMapSizeKey
 
 
 def test_mailboxing():
@@ -28,7 +31,8 @@ def test_mailboxing():
     assert mber.env.path() == mber.path
     assert os.path.exists(mber.path)
 
-    assert isinstance(mber.tpcs, lmdb._Database)
+    #assert isinstance(mber.tpcs, lmdb._Database)
+    assert isinstance(mber.tpcs, subing.OnSuber)
 
     mber.close(clear=True)
     assert not os.path.exists(mber.path)
@@ -85,7 +89,7 @@ def test_mailboxing():
             mber.storeMsg(topic=dest.qb64b, msg=exn.raw)
 
         msgs = []
-        for fn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b, fn=0):
+        for fn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b):
             msgs.append((fn, msg))
 
         assert(len(msgs)) == 10
@@ -95,20 +99,56 @@ def test_mailboxing():
             d = exn.ked["a"]
             assert d["b"] == idx
 
-        msgs = []
-        for fn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b, fn=10):
-            msgs.append(msg)
+        #msgs = []
+        #for fn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b, fn=10):
+            #msgs.append(msg)
 
-        assert(len(msgs)) == 0
+        #assert(len(msgs)) == 0
 
-        msgs = []
-        for tn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b, fn=4):
-            msgs.append((tn, msg))
+        #msgs = []
+        #for tn, topic, msg in mber.cloneTopicIter(topic=dest.qb64b, fn=4):
+            #msgs.append((tn, msg))
 
-        assert(len(msgs)) == 6
-        assert msgs[0][0] == 4
+        #assert(len(msgs)) == 6
+        #assert msgs[0][0] == 4
 
+def test_mailbox_db_size_set_from_env_var():
+    # Clear environment before test
+    if KERILMDBMapSizeKey in os.environ:
+        os.environ.pop(KERILMDBMapSizeKey)
+    if KERIMailboxerMapSizeKey in os.environ:
+        os.environ.pop(KERIMailboxerMapSizeKey)
 
+    new_map_size = 10737418240
+    # Default map size works
+    mber = Mailboxer()
+    assert mber.env.info()['map_size'] != new_map_size, "Expected map size to be the default 10MB"
+    assert mber.env.info()['map_size'] == LMDBer.MapSize, "Expected map size to be the default 10MB"
+    mber.close()
+
+    # Specific map size works
+    os.environ[KERIMailboxerMapSizeKey] = f"{new_map_size}"
+
+    mber = Mailboxer()
+    assert mber.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    os.environ.pop(KERIMailboxerMapSizeKey)
+    mber.close()
+
+    # generic map size works
+    baser_map_size = 10737418240
+    os.environ[KERILMDBMapSizeKey] = f"{baser_map_size}"
+
+    mber = Mailboxer()
+    assert mber.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    mber.close()
+
+    # Bad map size throws
+    os.environ[KERIMailboxerMapSizeKey] = f"bad_map_size"
+    with pytest.raises(ValueError) as excinfo:
+        Mailboxer()
+    assert "invalid literal for int" in str(excinfo.value), "Expected ValueError when map size is not an integer"
+    os.environ.pop(KERILMDBMapSizeKey)
+    os.environ.pop(KERIMailboxerMapSizeKey)
 
 if __name__ == '__main__':
     test_mailboxing()

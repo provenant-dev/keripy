@@ -3,14 +3,17 @@
 keri.app.notifying module
 
 """
+import os
 from collections.abc import Iterable
 from typing import Union, Type
 
-from keri import kering
+from keri import kering, help
 from keri.help import helping
 from keri.app import signaling
 from keri.core import coring
 from keri.db import dbing, subing
+
+logger = help.ogler.getLogger()
 
 
 def notice(attrs, dt=None, read=False):
@@ -180,11 +183,12 @@ class DicterSuber(subing.Suber):
             keys (tuple): of key strs to be combined in order to form key
 
         Returns:
-            iterator: of tuples of keys tuple and val coring.Serder for
+            iterator: of tuples of keys tuple and val serdering.SerderKERI for
             each entry in db
 
         """
-        for key, val in self.db.getAllItemIter(db=self.sdb, key=self._tokey(keys), split=False):
+        for key, val in self.db.getTopItemIter(db=self.sdb,
+                                               top=self._tokey(keys)):
             yield self._tokeys(key), self.klas(raw=bytes(val))
 
     def cntAll(self):
@@ -195,6 +199,9 @@ class DicterSuber(subing.Suber):
             count of all items
         """
         return self.db.cnt(db=self.sdb)
+
+# Env var for configuring LMDB size for the Noter database
+KERINoterMapSizeKey = "KERI_NOTER_MAP_SIZE"
 
 
 class Noter(dbing.LMDBer):
@@ -219,6 +226,15 @@ class Noter(dbing.LMDBer):
         self.notes = None
         self.nidx = None
         self.ncigs = None
+
+        mapSize = os.getenv(dbing.KERINoterMapSizeKey) or os.getenv(dbing.KERILMDBMapSizeKey)
+        if mapSize is not None:
+            try:
+                self.MapSize = int(mapSize)
+            except ValueError:
+                logger.error(f"LMDB map size environment variable must be an integer value > 1! "
+                            f"Use {dbing.KERINoterMapSizeKey} or {dbing.KERILMDBMapSizeKey}")
+                raise
 
         super(Noter, self).__init__(name=name, headDirPath=headDirPath, reopen=reopen, **kwa)
 

@@ -9,7 +9,7 @@ import pytest
 from keri import kering
 from keri.app import habbing, signing
 from keri.core import eventing as ceventing, scheming
-from keri.core import parsing, coring
+from keri.core import parsing, coring, indexing
 from keri.core.eventing import SealEvent
 from keri.help import helping
 from keri.vc import proving
@@ -17,7 +17,7 @@ from keri.vdr import verifying, credentialing, eventing
 
 
 def test_verifier_query(mockHelpingNowUTC, mockCoringRandomNonce):
-    with habbing.openHab(name="test", transferable=True, temp=True) as (hby, hab):
+    with habbing.openHab(name="test", transferable=True, temp=True, salt=b'0123456789abcdef') as (hby, hab):
         regery = credentialing.Regery(hby=hby, name="test", temp=True)
         issuer = regery.makeRegistry(prefix=hab.pre, name="test")
 
@@ -25,13 +25,13 @@ def test_verifier_query(mockHelpingNowUTC, mockCoringRandomNonce):
         msg = verfer.query(hab.pre, issuer.regk,
                            "EA8Ih8hxLi3mmkyItXK1u55cnHl4WgNZ_RE-gKXqgcX4",
                            route="tels")
-        assert msg == (b'{"v":"KERI10JSON0000fe_","t":"qry","d":"EHraBkp-XMf1x_bo70O2x3br'
-                       b'BCHlJHa7q_MzsBNeYz2_","dt":"2021-01-01T00:00:00.000000+00:00","r'
+        assert msg == (b'{"v":"KERI10JSON0000fe_","t":"qry","d":"EFa6oMZA5bgpALIc7yykT6O6'
+                       b'ovdbDQnRFeTPDI4zaOhr","dt":"2021-01-01T00:00:00.000000+00:00","r'
                        b'":"tels","rr":"","q":{"i":"EA8Ih8hxLi3mmkyItXK1u55cnHl4WgNZ_RE-g'
-                       b'KXqgcX4","ri":"EO0_SyqPS1-EVYSITakYpUHaUZZpZGsjaXFOaO_kCfS4"}}-V'
-                       b'Aj-HABEIaGMMWJFPmtXznY1IIiKDIrg-vIyge6mBl2QV8dDjI3-AABAABUWETZTw'
-                       b'TVuh0mNvN5KsJ_9V1epoP5wqgW32x8nUnGB20aI8xQBAhQ-aVP61ZEq97BDGSnxO'
-                       b'hU6tGCfDmvtugI')
+                       b'KXqgcX4","ri":"EB-u4VAF7A7_GR8PXJoAVHv5X9vjtXew8Yo6Z3w9mQUQ"}}-V'
+                       b'Aj-HABEMl4RhuR_JxpiMd1N8DEJEhTxM3Ovvn9Xya8AN-tiUbl-AABAABGnrnayV'
+                       b'yK1siivaffGHpWWhcVThPN_dsePQvMXrlsOYNf0UdT0e6ch-0bN-UuOJCd1behue'
+                       b'Zs_0V9FQ9vw0wK')
 
 
 def test_verifier(seeder):
@@ -115,6 +115,9 @@ def test_verifier(seeder):
         for idx, cred in enumerate(creds):
             assert dcre.sad == cred["sad"]
 
+        with pytest.raises(kering.MissingEntryError):
+            regery.reger.cloneCred(said="nonexistantsaid")
+
     """End Test"""
 
 
@@ -175,7 +178,7 @@ def test_verifier(seeder):
 #         sigs.extend(hab2.db.getSigs(dgkey))
 #         sigs.extend(hab3.db.getSigs(dgkey))
 #
-#         sigers = [coring.Siger(qb64b=bytes(sig)) for sig in sigs]
+#         sigers = [indexing.Siger(qb64b=bytes(sig)) for sig in sigs]
 #
 #         evt = bytearray(eraw)
 #         evt.extend(coring.Counter(code=coring.CtrDex.ControllerIdxSigs,
@@ -252,7 +255,7 @@ def test_verifier(seeder):
 #         sigs.extend(hab2.db.getSigs(dgkey))
 #         sigs.extend(hab3.db.getSigs(dgkey))
 #
-#         sigers = [coring.Siger(qb64b=bytes(sig)) for sig in sigs]
+#         sigers = [indexing.Siger(qb64b=bytes(sig)) for sig in sigs]
 #
 #         evt = bytearray(eraw)
 #         evt.extend(coring.Counter(code=coring.CtrDex.ControllerIdxSigs,
@@ -310,8 +313,8 @@ def test_verifier_chained_credential(seeder):
 
     with habbing.openHab(name="ron", temp=True, salt=b'0123456789abcdef') as (ronHby, ron), \
             habbing.openHab(name="ian", temp=True, salt=b'0123456789abcdef') as (ianHby, ian), \
-            habbing.openHab(name="han", transferable=True, temp=True) as (hanHby, han), \
-            habbing.openHab(name="vic", transferable=True, temp=True) as (vicHby, vic):
+            habbing.openHab(name="han", transferable=True, temp=True, salt=b'0123456789abcdef') as (hanHby, han), \
+            habbing.openHab(name="vic", transferable=True, temp=True, salt=b'0123456789abcdef') as (vicHby, vic):
         seeder.seedSchema(db=ronHby.db)
         seeder.seedSchema(db=ianHby.db)
         seeder.seedSchema(db=hanHby.db)

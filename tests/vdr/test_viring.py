@@ -8,9 +8,14 @@ import json
 import os
 
 import lmdb
+import pytest
 
-from keri.core.coring import Diger, versify, Serials
-from keri.db.dbing import openLMDB, dgKey, snKey
+from keri import kering
+from keri.app.keeping import KERIKeeperMapSizeKey
+from keri.core import coring
+from keri.core.coring import Diger, versify, Kinds
+from keri.core.serdering import SerderACDC
+from keri.db.dbing import openLMDB, dgKey, snKey, KERIBaserMapSizeKey, KERIRegerMapSizeKey, LMDBer
 from keri.vdr.viring import Reger
 
 
@@ -77,7 +82,7 @@ def test_issuer():
     #  test with registry inception (vcp) event
     regk = regb
     sn = 0
-    vs = versify(kind=Serials.json, size=20)
+    vs = versify(kind=Kinds.json, size=20)
 
     vcp = dict(v=vs, i=regk.decode("utf-8"),
                s="{:x}".format(sn), b=[rarb.decode("utf-8")],
@@ -184,7 +189,7 @@ def test_issuer():
         #  test with verifiable credential issuance (iss) event
         vcdig = b'EAvR3p8V95W8J7Ui4-mEzZ79S-A1esAnJo1Kmzq80Jkc'
         sn = 0
-        vs = versify(kind=Serials.json, size=20)
+        vs = versify(kind=Kinds.json, size=20)
 
         vcp = dict(v=vs, i=vcdig.decode("utf-8"),
                    s="{:x}".format(sn),
@@ -231,7 +236,7 @@ def test_issuer():
         assert issuer.putTel(snKey(vcdig, sn + 2), val=idig.qb64b) is True
         assert issuer.putTel(snKey(vcdig, sn + 3), val=rdig.qb64b) is True
 
-        result = [(sn, dig) for sn, dig in issuer.getTelItemPreIter(vcdig)]
+        result = [(sn, dig) for _, sn, dig in issuer.getTelItemPreIter(vcdig)]
         assert result == [(0, idig.qb64b), (1, rdig.qb64b), (2, idig.qb64b), (3, rdig.qb64b)]
 
         bak1 = b'BA1Q98kT0HRn9R62lY-LufjjKdbCeL1mqu9arTgOmbqI'
@@ -267,7 +272,7 @@ def test_clone():
 
     #  test with registry inception (vcp) event
     sn = 0
-    vs = versify(kind=Serials.json, size=20)
+    vs = versify(kind=Kinds.json, size=20)
 
     vcp = dict(v=vs, i=regk.decode("utf-8"),
                s="{:x}".format(sn), b=[rarb.decode("utf-8")],
@@ -341,6 +346,114 @@ def test_clone():
           b'PjioY7Ycna6ouhSSH0QcKsEjce10HCXIW_XtmEYr9SrB5BA-GAB0AAAAAAAAAAAA'
           b'AAAAAAAAABCEzpq06UecHwzy-K9FpNoRxCJp2wIGM9u2Edk-PLMZ1H4')
 
+def test_clearEscrows():
+    with openLMDB(cls=Reger) as db:
+        regk = "EAWdT7a7fZwRz0jiZ0DJxZEM3vsNbLDPEUk-ODnif3O0".encode("utf-8")
+        sn = 0
+        ooKey = snKey(regk, sn)
+        vs = versify(kind=coring.Kinds.json, size=20)
+        rarb = "BBjzaUuRMwh1ivT5BQrqNhbvx82lB-ofrHVHjL3WADbA".encode("utf-8")
+        vcp = dict(v=vs, i=regk.decode("utf-8"),
+                   s="{:x}".format(sn), b=[rarb.decode("utf-8")],
+                   t="vcp")
+
+        vcpb = json.dumps(vcp, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        vdig = Diger(ser=vcpb)
+
+        db.putOot(ooKey, val=vdig.qb64b)
+        db.putTwe(ooKey, val=vdig.qb64b)
+        db.putTae(ooKey, val=vdig.qb64b)
+
+        pre = 'k'
+        db.mre.put(keys=(pre, ), val=coring.Dater())
+        db.mce.put(keys=(pre, ), val=coring.Dater())
+        db.mse.put(keys=(pre, ), val=coring.Dater())
+
+        creder = SerderACDC(makify=True, proto=kering.Protocols.acdc, verify=False)
+        db.cmse.put(("a", "b"), val=creder)
+
+        prefixer = coring.Prefixer(qb64="EAD919wF4oiG7ck6mnBWTRD_Z-Io0wZKCxL0zjx5je9I")
+        seqner = coring.Seqner(sn=0)
+        saider = coring.Saider(qb64="EAD919wF4oiG7ck6mnBWTRD_Z-Io0wZKCxL0zjx5je9I")
+        db.tpwe.add(("a", "b"), (prefixer, seqner, saider))
+        db.tmse.add(("a", "b"), (prefixer, seqner, saider))
+        db.tede.add(("a", "b"), (prefixer, seqner, saider))
+
+        dater = coring.Dater()
+        broker_saider = coring.Saider(qb64="EBD919wF4oiG7ck6mnBWTRD_Z-Io0wZKCxL0zjx5je9I")
+        aid = "ECD919wF4oiG7ck6mnBWTRD_Z-Io0wZKCxL0zjx5je9I"
+        for typ in ["registry-mae", "registry-ooo", "credential-mre", "credential-mae", "credential-ooo"]:
+            db.txnsb.escrowdb.put(keys=(typ, pre, aid), vals=[broker_saider])
+            db.txnsb.daterdb.put(keys=(broker_saider.qb64,), val=dater)
+
+        assert db.getOot(ooKey) == vdig.qb64b
+        assert db.getTwe(ooKey) == vdig.qb64b
+        assert db.getTae(ooKey) == vdig.qb64b
+        assert db.mre.get((pre, )) is not None
+        assert db.mce.get((pre, )) is not None
+        assert db.mse.get((pre, )) is not None
+        assert db.cmse.cntAll() == 1
+        assert db.tpwe.cntAll() == 1
+        assert db.tmse.cntAll() == 1
+        assert db.tede.cntAll() == 1
+
+        for typ in ["registry-mae", "registry-ooo", "credential-mre", "credential-mae", "credential-ooo"]:
+            assert db.txnsb.escrowdb.get(keys=(typ, pre, aid)) != []
+
+        db.clearEscrows()
+
+        assert db.getOot(ooKey) is None
+        assert db.getTwe(ooKey) is None
+        assert db.getTae(ooKey) is None
+        assert db.mre.get((pre, )) is None
+        assert db.mce.get((pre, )) is None
+        assert db.mse.get((pre, )) is None
+        assert db.cmse.cntAll() == 0
+        assert db.tpwe.cntAll() == 0
+        assert db.tmse.cntAll() == 0
+        assert db.tede.cntAll() == 0
+
+        # Verify Broker escrows were cleared
+        for typ in ["registry-mae", "registry-ooo", "credential-mre", "credential-mae", "credential-ooo"]:
+            assert db.txnsb.escrowdb.get(keys=(typ, pre, aid)) == []
+        assert db.txnsb.daterdb.get(keys=(broker_saider.qb64,)) is None
+
+def test_mailbox_db_size_set_from_env_var():
+    # Clear environment before test
+    if KERIBaserMapSizeKey in os.environ:
+        os.environ.pop(KERIBaserMapSizeKey)
+    if KERIRegerMapSizeKey in os.environ:
+        os.environ.pop(KERIRegerMapSizeKey)
+
+    new_map_size = 10737418240
+    # Default map size works
+    reger = Reger()
+    assert reger.env.info()['map_size'] != new_map_size, "Expected map size to be the default 10MB"
+    assert reger.env.info()['map_size'] == LMDBer.MapSize, "Expected map size to be the default 10MB"
+    reger.close()
+
+    # Specific map size works
+    os.environ[KERIRegerMapSizeKey] = f"{new_map_size}"
+
+    reger = Reger()
+    assert reger.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    os.environ.pop(KERIRegerMapSizeKey)
+    reger.close()
+
+    # generic map size works
+    baser_map_size = 10737418240
+    os.environ[KERIRegerMapSizeKey] = f"{baser_map_size}"
+
+    reger = Reger()
+    assert reger.env.info()['map_size'] == new_map_size, "Expected map size to be set from environment variable to 10GB"
+    reger.close()
+
+    # Bad map size throws
+    os.environ[KERIRegerMapSizeKey] = f"bad_map_size"
+    with pytest.raises(ValueError) as excinfo:
+        Reger()
+    assert "invalid literal for int" in str(excinfo.value), "Expected ValueError when map size is not an integer"
+    os.environ.pop(KERIRegerMapSizeKey)
 
 if __name__ == "__main__":
     test_issuer()

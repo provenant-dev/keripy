@@ -22,7 +22,7 @@ parser.add_argument('--base', '-b', help='additional optional prefix to file loc
                     required=False, default="")
 parser.add_argument('--alias', '-a', help='human readable alias for the identifier prefix', required=True)
 parser.add_argument('new', help='new human readable alias for the identifier')
-parser.add_argument('--passcode', '-p', help='22 character encryption passcode for keystore (is not saved)',
+parser.add_argument('--passcode', '-p', help='21 character encryption passcode for keystore (is not saved)',
                     dest="bran", default=None)  # passcode => bran
 
 
@@ -45,12 +45,22 @@ def rename(tymth, tock=0.0, **opts):
 
     try:
         with existing.existingHab(name=name, alias=alias, base=base, bran=bran) as (hby, hab):
-            habord = hab.db.habs.get(keys=alias)
-            hab.db.habs.put(keys=newAlias,
-                            val=habord)
-            hab.db.habs.rem(keys=alias)
+            if hby.habByName(newAlias) is not None:
+                print(f"{newAlias} is already in use")
 
-            print(f"Hab {alias} renamed to {newAlias}")
+            if (pre := hab.db.names.get(keys=("", alias))) is not None:
+
+                habord = hab.db.habs.get(keys=pre)
+                habord.name = newAlias
+                hab.db.habs.pin(keys=habord.hid,
+                                val=habord)
+                hab.db.names.pin(keys=("", newAlias), val=pre)
+                hab.db.names.rem(keys=("", alias))
+
+                print(f"Hab {alias} renamed to {newAlias}")
+            else:
+                raise ConfigurationError(f"No AID with name {alias} found")
+
 
     except ConfigurationError as e:
         print(f"identifier prefix for {name} does not exist, incept must be run first", )
