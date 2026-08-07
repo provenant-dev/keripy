@@ -295,6 +295,135 @@ def test_resolution():
             schemer.verify(badload)
 
 
+def test_resolution_bare_said_ref():
+    """ Test resolving a bare-SAID $ref (no "did:" scheme prefix) via
+    CacheResolver, including a two-level chain to confirm transitive
+    resolution and that a field required only by the middle schema in the
+    chain is still enforced.
+    """
+    basesad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["z"],
+        "properties": {"z": {"type": "number"}},
+    }
+    saider, basesad = Saider.saidify(basesad, label=Saids.dollar)
+    basesaid = saider.qb64
+    base = dumps(basesad)
+
+    midsad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "allOf": [
+            {"$ref": ""},
+            {
+                "type": "object",
+                "required": ["m"],
+                "properties": {"m": {"type": "string"}},
+            },
+        ],
+    }
+    midsad["allOf"][0]["$ref"] = basesaid
+    saider, midsad = Saider.saidify(midsad, label=Saids.dollar)
+    midsaid = saider.qb64
+    mid = dumps(midsad)
+
+    topsad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "allOf": [
+            {"$ref": ""},
+            {
+                "type": "object",
+                "required": ["t"],
+                "properties": {"t": {"type": "string"}},
+            },
+        ],
+    }
+    topsad["allOf"][0]["$ref"] = midsaid
+    saider, topsad = Saider.saidify(topsad, label=Saids.dollar)
+    top = dumps(topsad)
+
+    good = json.dumps({"z": 1, "m": "x", "t": "y"}).encode("utf-8")
+    missingMid = json.dumps({"z": 1, "t": "y"}).encode("utf-8")
+    missingBase = json.dumps({"m": "x", "t": "y"}).encode("utf-8")
+    missingTop = json.dumps({"z": 1, "m": "x"}).encode("utf-8")
+
+    with basing.openDB(name="bare-said-ref") as db:
+        cache = CacheResolver(db=db)
+        cache.add(basesaid, base)  # only base and mid are pre-cached; top is the schema under test
+        cache.add(midsaid, mid)
+
+        schemer = Schemer(raw=top)
+        schemer.typ = JSONSchema(resolver=cache)
+
+        assert schemer.verify(good) is True
+
+        # each level's required field must still be independently enforced
+        # through the chain, not short-circuited by the other levels passing
+        with pytest.raises(ValidationError):
+            schemer.verify(missingMid)
+
+        with pytest.raises(ValidationError):
+            schemer.verify(missingBase)
+
+        with pytest.raises(ValidationError):
+            schemer.verify(missingTop)
+
+
+def test_resolution_unresolvable_bare_said_ref():
+    """ A bare-SAID $ref to a schema that was never cached locally must still
+    fail closed, not be silently treated as satisfied.
+    """
+    sad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "allOf": [
+            {"$ref": "EDoesNotExistInLocalCache00000000000000000"},
+            {"type": "object"},
+        ],
+    }
+    saider, sad = Saider.saidify(sad, label=Saids.dollar)
+    raw = dumps(sad)
+
+    with basing.openDB(name="unresolvable-said-ref") as db:
+        cache = CacheResolver(db=db)  # nothing added to the cache
+
+        schemer = Schemer(raw=raw)
+        schemer.typ = JSONSchema(resolver=cache)
+
+        with pytest.raises(ValidationError):
+            schemer.verify(b'{}')
+
+
+def test_resolution_no_ref_with_resolver_present():
+    """ A plain schema with no $ref at all must still validate normally when
+    a resolver is attached, i.e. attaching a resolver must not change
+    behavior for schemas that don't use it.
+    """
+    sad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["a"],
+        "properties": {"a": {"type": "string"}},
+    }
+    saider, sad = Saider.saidify(sad, label=Saids.dollar)
+    raw = dumps(sad)
+
+    with basing.openDB(name="no-ref-with-resolver") as db:
+        cache = CacheResolver(db=db)
+
+        schemer = Schemer(raw=raw)
+        schemer.typ = JSONSchema(resolver=cache)
+
+        assert schemer.verify(b'{"a": "x"}') is True
+
+        with pytest.raises(ValidationError):
+            schemer.verify(b'{}')
+
+
 if __name__ == '__main__':
     test_json_schema()
     test_json_schema_dict()

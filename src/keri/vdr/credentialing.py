@@ -831,7 +831,7 @@ class Credentialer(doing.DoDoer):
             raise kering.ConfigurationError("Credential schema {} not found.  It must be loaded with data oobi before "
                                             "issuing credentials".format(schema))
 
-        schemer = scheming.Schemer(raw=scraw)
+        schemer = scheming.Schemer(raw=scraw, resolver=self.verifier.resolver)
         try:
             schemer.verify(creder.raw)
         except kering.ValidationError as ex:

@@ -76,11 +76,26 @@ class CacheResolver:
         Returns a jsonschema resolver for returning locally cached schema based on self-addressing
         identifier URIs.
 
+        A schema can point at another schema (e.g. to extend it) by putting
+        that schema's identifier in a $ref value. This resolver knows how to
+        look up two forms of $ref:
+          - "did:"-scheme URIs (e.g. "did:keri:<SAID>"), via .handler
+          - a bare SAID with no URI scheme at all (e.g. just
+            "EAbc123..."), looked up in a jsonschema `store` built here
+            from every schema already cached locally in .db.schema
+
+        Note: .db.schema is keyed by each schema's own verified
+        SAID (see CacheResolver.add), so building the store from it cannot
+        be used to swap in a different schema under a given SAID.
+
         Parameters:
             scer (Optional(bytes)) is the source document that is being processed for reference resolution
 
         """
-        return jsonschema.RefResolver("", scer, handlers={"did": self.handler})
+        store = {}
+        for (said,), schemer in self.db.schema.getItemIter():
+            store[said] = schemer.sed
+        return jsonschema.RefResolver("", scer, store=store, handlers={"did": self.handler})
 
 
 class JSONSchema:
@@ -267,7 +282,7 @@ class Schemer:
     """
 
     def __init__(self, raw=b'', sed=None, kind=None, typ=JSONSchema(),
-                       code=MtrDex.Blake3_256, verify=True):
+                       code=MtrDex.Blake3_256, verify=True, resolver=None):
         """  Initialize instance of Schemer
 
         Deserialize if raw provided
@@ -278,7 +293,8 @@ class Schemer:
             raw (bytes): of serialized schema
             sed (dict): dict or None
                   if None its deserialized from raw
-            typ (JSONSchema): type of schema
+            typ (JSONSchema): type of schema. Only honored when sed (not raw)
+                is provided; see resolver below for the raw case.
             kind (serialization): kind string value or None (see namedtuple coring.Serials)
                 supported kinds are 'json', 'cbor', 'msgpack', 'binary'
                  if kind (None): then its extracted from ked or raw
@@ -288,10 +304,21 @@ class Schemer:
                            False means don't verify. Useful to avoid unnecessary
                            reverification when deserializing from database
                            as opposed to over the wire reception.
+            resolver (Optional(CacheResolver)): used to resolve any $ref
+                values in the schema (e.g. one schema extending another).
+                Only used when raw is provided. Deserializing from raw
+                always auto-detects the schema type via ._sniff and
+                overwrites typ with the freshly-detected one -- so a typ
+                passed in above, and any resolver it carried, would
+                otherwise be silently thrown away. Passing resolver here
+                lets ._sniff carry it into that freshly-detected typ
+                instead. Has no effect when sed is provided; pass a
+                resolver-bearing typ directly in that case instead.
 
         """
 
         self._code = code
+        self._resolver = resolver
         if raw:
             self.raw = raw
         elif sed:
@@ -333,8 +360,7 @@ class Schemer:
 
         return raw, sed, kind, saider
 
-    @staticmethod
-    def _sniff(raw):
+    def _sniff(self, raw):
         """ Determine type of schema from raw bytes
 
         Parameters:
@@ -346,10 +372,10 @@ class Schemer:
         except ValueError:
             pass
         else:
-            return JSONSchema()
+            return JSONSchema(resolver=self._resolver)
 
         # Default for now is JSONSchema because we don't support any other
-        return JSONSchema()
+        return JSONSchema(resolver=self._resolver)
 
     @property
     def raw(self):
