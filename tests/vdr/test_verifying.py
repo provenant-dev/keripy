@@ -118,6 +118,193 @@ def test_verifier(seeder):
         with pytest.raises(kering.MissingEntryError):
             regery.reger.cloneCred(said="nonexistantsaid")
 
+
+def _pinChainedSchema(db):
+    """ Pin a base schema and a derived schema into db.schema, where the
+    derived schema's top-level allOf[0].$ref is the base schema's bare SAID
+    (no "did:" scheme prefix). The base schema requires attribute "z"; the
+    derived schema separately requires its own attribute "m", so tests can
+    independently prove each half of the chain is enforced.
+
+    Returns:
+        tuple(str, str): (base schema SAID, derived schema SAID)
+    """
+    basesad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Base",
+        "type": "object",
+        "required": ["v", "d", "i", "s", "a"],
+        "properties": {
+            "v": {"type": "string"},
+            "d": {"type": "string"},
+            "i": {"type": "string"},
+            "s": {"type": "string"},
+            "a": {
+                "type": "object",
+                "additionalProperties": True,
+                "required": ["d", "z"],
+                "properties": {
+                    "d": {"type": "string"},
+                    "z": {"type": "string"},
+                },
+            },
+        },
+    }
+    _, basesad = coring.Saider.saidify(basesad, label=coring.Saids.dollar)
+    baseschemer = scheming.Schemer(sed=basesad)
+    db.schema.pin(keys=(baseschemer.said,), val=baseschemer)
+
+    derivedsad = {
+        "$id": "",
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Derived",
+        "allOf": [
+            {"$ref": ""},
+            {
+                "type": "object",
+                "additionalProperties": True,
+                "required": ["ri"],
+                "properties": {
+                    "ri": {"type": "string"},
+                    "a": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "required": ["m"],
+                        "properties": {"m": {"type": "string"}},
+                    },
+                },
+            },
+        ],
+    }
+    derivedsad["allOf"][0]["$ref"] = baseschemer.said
+    _, derivedsad = coring.Saider.saidify(derivedsad, label=coring.Saids.dollar)
+    derivedschemer = scheming.Schemer(sed=derivedsad)
+    db.schema.pin(keys=(derivedschemer.said,), val=derivedschemer)
+
+    return baseschemer.said, derivedschemer.said
+
+
+def test_verifier_chained_schema():
+    """ Verifier.processCredential() -- the path keripy uses to validate a
+    credential presented by someone else (e.g. over IPEX) -- must accept a
+    credential whose schema inherits from a base schema via a bare-SAID
+    $ref, and must still enforce requirements contributed by either half of
+    the chain. See also test_credentialing.py::test_credentialer_create_chained_schema,
+    which covers the same $ref resolution for the self-issuance call site.
+    """
+    with habbing.openHab(name="sid", temp=True, salt=b'0123456789abcdef') as (hby, hab), \
+            habbing.openHab(name="recp", transferable=True, temp=True) as (recpHby, recp):
+        basesaid, derivedsaid = _pinChainedSchema(hby.db)
+
+        regery = credentialing.Regery(hby=hby, name="test", temp=True)
+        issuer = regery.makeRegistry(prefix=hab.pre, name="test")
+        rseal = SealEvent(issuer.regk, "0", issuer.regd)._asdict()
+        hab.interact(data=[rseal])
+        seqner = coring.Seqner(sn=hab.kever.sn)
+        issuer.anchorMsg(pre=issuer.regk,
+                         regd=issuer.regd,
+                         seqner=seqner,
+                         saider=coring.Saider(qb64=hab.kever.serder.said))
+        regery.processEscrows()
+
+        verifier = verifying.Verifier(hby=hby, reger=regery.reger)
+
+        credSubject = dict(
+            d="",
+            i=recp.pre,
+            dt=helping.nowIso8601(),
+            z="zval",
+            m="mval",
+        )
+        _, d = scheming.Saider.saidify(sad=credSubject, code=coring.MtrDex.Blake3_256, label=scheming.Saids.d)
+
+        creder = proving.credential(issuer=hab.pre,
+                                    schema=derivedsaid,
+                                    data=d,
+                                    status=issuer.regk)
+
+        try:
+            verifier.processCredential(creder, prefixer=hab.kever.prefixer, seqner=seqner,
+                                       saider=coring.Saider(qb64=hab.kever.serder.said))
+        except kering.MissingRegistryError:
+            pass  # expected: TEL anchor not escrowed/found yet, same as test_verifier above
+
+        assert len(verifier.cues) == 1
+        cue = verifier.cues.popleft()
+        assert cue["kin"] == "telquery"
+
+        iss = issuer.issue(said=creder.said)
+        rseal = SealEvent(iss.pre, "0", iss.said)._asdict()
+        hab.interact(data=[rseal])
+        seqner = coring.Seqner(sn=hab.kever.sn)
+        issuer.anchorMsg(pre=iss.pre,
+                         regd=iss.said,
+                         seqner=seqner,
+                         saider=coring.Saider(qb64=hab.kever.serder.said))
+        regery.processEscrows()
+
+        verifier.processEscrows()
+
+        assert len(verifier.cues) == 1
+        cue = verifier.cues.popleft()
+        assert cue["kin"] == "saved"
+        assert cue["creder"].raw == creder.raw
+
+
+def test_verifier_chained_schema_missing_base_required_field():
+    """ A credential presented for verification that satisfies the derived
+    schema but omits a field required only by the inherited base schema
+    must still be rejected by Verifier.processCredential(), once the
+    registry/TEL state is otherwise all in place (i.e. it's specifically
+    the schema check that rejects it, not a registry/anchor precondition).
+    """
+    with habbing.openHab(name="sid", temp=True, salt=b'0123456789abcdef') as (hby, hab), \
+            habbing.openHab(name="recp", transferable=True, temp=True) as (recpHby, recp):
+        _, derivedsaid = _pinChainedSchema(hby.db)
+
+        regery = credentialing.Regery(hby=hby, name="test", temp=True)
+        issuer = regery.makeRegistry(prefix=hab.pre, name="test")
+        rseal = SealEvent(issuer.regk, "0", issuer.regd)._asdict()
+        hab.interact(data=[rseal])
+        seqner = coring.Seqner(sn=hab.kever.sn)
+        issuer.anchorMsg(pre=issuer.regk,
+                         regd=issuer.regd,
+                         seqner=seqner,
+                         saider=coring.Saider(qb64=hab.kever.serder.said))
+        regery.processEscrows()
+
+        verifier = verifying.Verifier(hby=hby, reger=regery.reger)
+
+        credSubject = dict(
+            d="",
+            i=recp.pre,
+            dt=helping.nowIso8601(),
+            m="mval",  # base-required 'z' deliberately omitted
+        )
+        _, d = scheming.Saider.saidify(sad=credSubject, code=coring.MtrDex.Blake3_256, label=scheming.Saids.d)
+
+        creder = proving.credential(issuer=hab.pre,
+                                    schema=derivedsaid,
+                                    data=d,
+                                    status=issuer.regk)
+
+        # issue + anchor the TEL event first so the registry/state checks in
+        # processCredential() pass through to the schema check in this one call
+        iss = issuer.issue(said=creder.said)
+        rseal = SealEvent(iss.pre, "0", iss.said)._asdict()
+        hab.interact(data=[rseal])
+        seqner = coring.Seqner(sn=hab.kever.sn)
+        issuer.anchorMsg(pre=iss.pre,
+                         regd=iss.said,
+                         seqner=seqner,
+                         saider=coring.Saider(qb64=hab.kever.serder.said))
+        regery.processEscrows()
+
+        with pytest.raises(kering.FailedSchemaValidationError):
+            verifier.processCredential(creder, prefixer=hab.kever.prefixer, seqner=seqner,
+                                       saider=coring.Saider(qb64=hab.kever.serder.said))
+
     """End Test"""
 
 
