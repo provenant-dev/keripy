@@ -32,6 +32,8 @@ class CacheResolver:
 
         """
         self.db = db
+        self._store = {}
+        self._storeCount = -1  # forces .resolver() to build the store on first use
 
     def add(self, key, schema):
         """ Add schema to cache for resolution
@@ -88,14 +90,30 @@ class CacheResolver:
         SAID (see CacheResolver.add), so building the store from it cannot
         be used to swap in a different schema under a given SAID.
 
+        This method runs once per schema check (see JSONSchema.verify_json),
+        so rebuilding the store from every cached schema on every call would
+        mean re-reading and re-parsing the whole local schema cache on every
+        single credential validation, growing with however many schemas
+        this Habery has ever cached. .db.schema.cntAll() is a cheaper check
+        (it steps through keys only, without deserializing each schema's
+        JSON), and since .db.schema entries are keyed by their own content
+        SAID and are never removed, that count can only change when a
+        schema is added, so it's an exact signal for when the store
+        actually needs rebuilding, at a fraction of the cost of rebuilding
+        it unconditionally.
+
         Parameters:
             scer (Optional(bytes)) is the source document that is being processed for reference resolution
 
         """
-        store = {}
-        for (said,), schemer in self.db.schema.getItemIter():
-            store[said] = schemer.sed
-        return jsonschema.RefResolver("", scer, store=store, handlers={"did": self.handler})
+        count = self.db.schema.cntAll()
+        if count != self._storeCount:
+            store = {}
+            for (said,), schemer in self.db.schema.getItemIter():
+                store[said] = schemer.sed
+            self._store = store
+            self._storeCount = count
+        return jsonschema.RefResolver("", scer, store=self._store, handlers={"did": self.handler})
 
 
 class JSONSchema:
