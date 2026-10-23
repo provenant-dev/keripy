@@ -193,8 +193,8 @@ class JSONSchema:
 
         return True
 
-    @lru_cache(maxsize=2048)
     @staticmethod
+    @lru_cache(maxsize=2048)
     def verify_schema_str(schema_str):
         """Cached version verify_schema() since we can't cache functions with dict as parameter"""
         schema = json.loads(schema_str)
