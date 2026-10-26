@@ -243,7 +243,7 @@ class Habery:
 
 
     def setup(self, *, seed=None, aeid=None, bran=None, pidx=None, algo=None,
-              salt=None, tier=None, free=False, temp=None, ):
+              salt=None, tier=None, free=False, temp=None, extern=None):
         """
         Setup Habery. Assumes that both .db and .ks have been opened.
         This allows dependency injection of .db and .ks into Habery instance
@@ -282,6 +282,8 @@ class Habery:
                     Use quick method to stretch salts for seeds such as
                     bran salt to seed or key creation of Habs.
                     Otherwise use more resources set by tier to stretch
+            extern (keeping.ExternModule | None): external key module for
+                keeping.Algos.extern identifiers, passed to the Manager
         """
         if not (self.ks.opened and self.db.opened):
             raise kering.ClosedError("Attempt to setup Habitat with closed "
@@ -306,7 +308,8 @@ class Habery:
 
         try:
             self.mgr = keeping.Manager(ks=self.ks, seed=seed, aeid=aeid, pidx=pidx,
-                                       algo=algo, salt=salt, tier=tier)
+                                       algo=algo, salt=salt, tier=tier,
+                                       extern=extern)
         except kering.AuthError as ex:
             self.close()
             raise ex
@@ -2190,7 +2193,7 @@ class Hab(BaseHab):
     def make(self, *, secrecies=None, iridx=0, code=coring.MtrDex.Blake3_256, dcode=coring.MtrDex.Blake3_256,
              icode=coring.MtrDex.Ed25519_Seed, transferable=True, isith=None, icount=1, nsith=None, ncount=None,
              toad=None, wits=None, delpre=None, estOnly=False, DnD=False, hidden=False, data=None, algo=None,
-             salt=None, tier=None):
+             salt=None, tier=None, stem=None):
         """
         Finish setting up or making Hab from parameters includes inception.
         Assumes injected dependencies were already setup.
@@ -2227,6 +2230,9 @@ class Hab(BaseHab):
                         algo is str key creation algorithm code
             salt(str): qb64 salt for randomization when salty algorithm used
             tier(str): is str security criticality tier code when using salty algorithm
+            stem(str | None): key path stem override. Default is the Hab name
+                (with namespace). For keeping.Algos.extern it is the opaque
+                external key handle persisted for the identifier.
 
 
         """
@@ -2242,7 +2248,8 @@ class Hab(BaseHab):
             nsith = '0'
             code = coring.MtrDex.Ed25519N
 
-        stem = self.name if self.ns is None else f"{self.ns}{self.name}"
+        if stem is None:
+            stem = self.name if self.ns is None else f"{self.ns}{self.name}"
         if secrecies:  # replay
             ipre, _ = self.mgr.ingest(secrecies,
                                       iridx=iridx,

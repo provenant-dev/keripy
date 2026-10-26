@@ -41,6 +41,8 @@ logger = help.ogler.getLogger()
 Algoage = namedtuple("Algoage", 'randy salty group extern')
 Algos = Algoage(randy='randy', salty='salty', group="group", extern="extern")  # randy is rerandomize, salty is use salt
 
+from .externing import ExternModule  # noqa: E402,F401  external key module for Algos.extern
+
 
 @dataclass()
 class PubLot:
@@ -657,7 +659,7 @@ class Manager:
 
     """
 
-    def __init__(self, *, ks=None, seed=None, **kwa):
+    def __init__(self, *, ks=None, seed=None, extern=None, **kwa):
         """
         Setup Manager.
 
@@ -691,6 +693,7 @@ class Manager:
         self.encrypter = None
         self.decrypter = None
         self._seed = seed if seed is not None else ""
+        self.extern = extern  # ExternModule used for Algos.extern, else None
         self.inited = False
 
         # save keyword arg parameters to init later if db not opened yet
@@ -1004,6 +1007,13 @@ class Manager:
         ridx = 0  # rotation index
         kidx = 0  # key pair index
 
+        if algo == Algos.extern:
+            return self._inceptExtern(pidx=pidx, ridx=ridx, kidx=kidx, stem=stem,
+                                      icodes=icodes, icount=icount, icode=icode,
+                                      ncodes=ncodes, ncount=ncount, ncode=ncode,
+                                      dcode=dcode, transferable=transferable,
+                                      temp=temp)
+
         creator = Creatory(algo=algo).make(salt=salt, stem=stem, tier=tier)
 
         if not icodes:  # all same code, make list of len icount of same code
@@ -1180,6 +1190,10 @@ class Manager:
         if not ps.nxt.pubs:  # empty nxt public keys so non-transferable prefix
             raise ValueError("Attempt to rotate nontransferable pre={}.".format(pre))
 
+        if pp.algo == Algos.extern:
+            raise NotImplementedError("Rotation of extern pre={} is not "
+                                      "supported.".format(pre))
+
         old = ps.old  # save prior old so can clean out if rotate successful
         ps.old = ps.new  # move prior new to old so save previous one step
         ps.new = ps.nxt  # move prior nxt to new which new is now current signer
@@ -1328,6 +1342,11 @@ class Manager:
         then signs ser with eah pub
         returns list of sigers indexed else list of cigars if not
         """
+        if (xpre := self._externPre(pubs=pubs, verfers=verfers, pre=pre)) is not None:
+            return self._signExtern(ser, xpre, pubs=pubs, verfers=verfers,
+                                    indexed=indexed, indices=indices,
+                                    ondices=ondices)
+
         signers = []
 
         if pubs is None and verfers is None:
@@ -1409,6 +1428,86 @@ class Manager:
             for signer in signers:
                 cigars.append(signer.sign(ser))  # assigns .verfer to cigar
             return cigars
+
+
+    def _inceptExtern(self, *, pidx, ridx, kidx, stem, icodes, icount, icode,
+                      ncodes, ncount, ncode, dcode, transferable, temp):
+        """
+        Incept via .extern (ExternModule) for Algos.extern. Persists only
+        public material; stem is the opaque external key handle, kept in
+        PrePrm.stem and passed back to the module on every later sign.
+        Returns (verfers, digers) like the local algorithms.
+        """
+        if self.extern is None:
+            raise ValueError("Algos.extern requested but no extern module "
+                             "provided to Manager.")
+
+        verfers, digers = self.extern.incept(stem=stem, icodes=icodes,
+                                             icount=icount, icode=icode,
+                                             ncodes=ncodes, ncount=ncount,
+                                             ncode=ncode, dcode=dcode,
+                                             transferable=transferable,
+                                             temp=temp)
+        if not verfers:
+            raise ValueError("Extern module returned no keys.")
+
+        pp = PrePrm(pidx=pidx, algo=Algos.extern, stem=stem or '')
+        dt = helping.nowIso8601()
+        ps = PreSit(new=PubLot(pubs=[verfer.qb64 for verfer in verfers],
+                               ridx=ridx, kidx=kidx, dt=dt),
+                    nxt=PubLot(pubs=[diger.qb64 for diger in digers],
+                               ridx=ridx + 1, kidx=kidx + len(verfers), dt=dt))
+
+        pre = verfers[0].qb64b
+        if not self.ks.pres.put(pre, val=coring.Prefixer(qb64=pre)):
+            raise ValueError("Already incepted pre={}.".format(pre.decode("utf-8")))
+
+        if not self.ks.prms.put(pre, val=pp):
+            raise ValueError("Already incepted prm for pre={}.".format(pre.decode("utf-8")))
+
+        self.pidx = pidx + 1  # increments .pidx and saves to .ks
+
+        if not self.ks.sits.put(pre, val=ps):
+            raise ValueError("Already incepted sit for pre={}.".format(pre.decode("utf-8")))
+
+        self.ks.pubs.put(riKey(pre, ri=ridx), val=PubSet(pubs=ps.new.pubs))
+        self.ks.pubs.put(riKey(pre, ri=ridx + 1), val=PubSet(pubs=ps.nxt.pubs))
+
+        return verfers, digers
+
+
+    def _externPre(self, pubs=None, verfers=None, pre=None):
+        """
+        Returns pre when signing keys belong to an Algos.extern identifier
+        in .ks else None. Looks up the first key in .ks.pres, which .move()
+        keeps pointing at the permanent prefix.
+        """
+        if pubs:
+            first = pubs[0]
+        elif verfers:
+            first = verfers[0].qb64
+        else:
+            first = None
+
+        if first is not None:
+            if (prefixer := self.ks.pres.get(first)) is None:
+                return None
+            pre = prefixer.qb64
+
+        if pre is None or (pp := self.ks.prms.get(pre)) is None:
+            return None
+        return pre if pp.algo == Algos.extern else None
+
+
+    def _signExtern(self, ser, pre, *, pubs, verfers, indexed, indices, ondices):
+        """Sign ser for extern identifier pre through .extern."""
+        if self.extern is None:
+            raise ValueError("Algos.extern requested but no extern module "
+                             "provided to Manager.")
+        pp = self.ks.prms.get(pre)
+        return self.extern.sign(ser, pre=pre, stem=pp.stem, pubs=pubs,
+                                verfers=verfers, indexed=indexed,
+                                indices=indices, ondices=ondices)
 
 
     def decrypt(self, qb64, pubs=None, verfers=None):
