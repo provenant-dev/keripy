@@ -10,6 +10,9 @@ import json
 import cbor2 as cbor
 import jsonschema
 import msgpack
+import referencing
+import referencing.exceptions
+from referencing.jsonschema import DRAFT7
 
 from . import coring
 from .coring import MtrDex, Kinds, Saider, Saids
@@ -32,8 +35,10 @@ class CacheResolver:
 
         """
         self.db = db
-        self._store = {}
-        self._storeCount = -1  # forces .resolver() to build the store on first use
+        # Registry is immutable and .retrieve reads .db live, so one built
+        # here stays correct as schemas are added -- nothing is ever stored
+        # back into it, so there is no stale copy to invalidate.
+        self._registry = referencing.Registry(retrieve=self.retrieve)
 
     def add(self, key, schema):
         """ Add schema to cache for resolution
@@ -72,48 +77,53 @@ class CacheResolver:
 
         return schemer.sed
 
-    def resolver(self, scer=b''):
-        """ Locally cached schema resolver
+    def retrieve(self, uri):
+        """ Retrieve hook given to the jsonschema registry
 
-        Returns a jsonschema resolver for returning locally cached schema based on self-addressing
-        identifier URIs.
-
-        A schema can point at another schema (e.g. to extend it) by putting
-        that schema's identifier in a $ref value. This resolver knows how to
-        look up two forms of $ref:
-          - "did:"-scheme URIs (e.g. "did:keri:<SAID>"), via .handler
-          - a bare SAID with no URI scheme at all (e.g. just
-            "EAbc123..."), looked up in a jsonschema `store` built here
-            from every schema already cached locally in .db.schema
-
-        Note: .db.schema is keyed by each schema's own verified
-        SAID (see CacheResolver.add), so building the store from it cannot
-        be used to swap in a different schema under a given SAID.
-
-        This method runs once per schema check (see JSONSchema.verify_json),
-        so rebuilding the store from every cached schema on every call would
-        mean re-reading and re-parsing the whole local schema cache on every
-        single credential validation, growing with however many schemas
-        this Habery has ever cached. .db.schema.cntAll() is a cheaper check
-        (it steps through keys only, without deserializing each schema's
-        JSON), and since .db.schema entries are keyed by their own content
-        SAID and are never removed, that count can only change when a
-        schema is added, so it's an exact signal for when the store
-        actually needs rebuilding, at a fraction of the cost of rebuilding
-        it unconditionally.
+        Returns the locally cached schema for uri as a referencing Resource.
 
         Parameters:
-            scer (Optional(bytes)) is the source document that is being processed for reference resolution
+            uri (str): absolute URI of the schema to retrieve
+
+        Raises:
+            referencing.exceptions.NoSuchResource: if uri is not cached
+                locally, so that an unresolvable $ref fails closed rather
+                than being silently treated as satisfied
 
         """
-        count = self.db.schema.cntAll()
-        if count != self._storeCount:
-            store = {}
-            for (said,), schemer in self.db.schema.getItemIter():
-                store[said] = schemer.sed
-            self._store = store
-            self._storeCount = count
-        return jsonschema.RefResolver("", scer, store=self._store, handlers={"did": self.handler})
+        sed = self.handler(uri)
+        if sed is None:
+            raise referencing.exceptions.NoSuchResource(ref=uri)
+
+        # honors the schema's own $schema, falling back to draft 7
+        return referencing.Resource.from_contents(sed, default_specification=DRAFT7)
+
+    def registry(self):
+        """ Locally cached schema registry
+
+        Returns a jsonschema registry that resolves $ref values against
+        schema cached locally in .db.schema, keyed by self-addressing
+        identifier.
+
+        A schema can point at another schema (e.g. to extend it) by putting
+        that schema's identifier in a $ref value. This registry resolves
+        three forms of $ref:
+          - "did:"-scheme URIs (e.g. "did:keri:<SAID>")
+          - a bare SAID with no URI scheme at all (e.g. just "EAbc123...")
+          - a fragment internal to the schema being validated (e.g.
+            "#/definitions/foo")
+
+        Both SAID forms go through .retrieve, which is called lazily, only
+        for the refs a given schema actually uses, so checking a credential
+        costs a lookup per ref rather than a read of the whole local schema
+        cache.
+
+        Note: .db.schema is keyed by each schema's own verified SAID (see
+        CacheResolver.add), so resolving through it cannot be used to swap
+        in a different schema under a given SAID.
+
+        """
+        return self._registry
 
 
 class JSONSchema:
@@ -259,12 +269,14 @@ class JSONSchema:
             d = json.loads(raw)
             kwargs = dict()
             if self.resolver is not None:
-                kwargs["resolver"] = self.resolver.resolver(scer=raw)
+                kwargs["registry"] = self.resolver.registry()
             jsonschema.validate(instance=d, schema=schema, **kwargs)
         except jsonschema.exceptions.ValidationError as ex:
             raise kering.ValidationError(f'Credential validation exception: {ex}')
         except jsonschema.exceptions.SchemaError as ex:
             raise kering.ValidationError(f'Schema exception: {ex}')
+        except referencing.exceptions.Unresolvable as ex:
+            raise kering.ValidationError(f'Schema reference exception: {ex}')
         except json.decoder.JSONDecodeError as ex:
             raise kering.ValidationError(f"Credential JSON exception: {ex}")
         except Exception as ex:

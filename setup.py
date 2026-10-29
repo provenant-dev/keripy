@@ -86,6 +86,7 @@ setup(
                         'hio @ git+https://github.com/provenant-dev/hio@v0.6.14-fix1',
                         'multicommand==1.0.0',
                         'jsonschema>=4.21.1',
+                        'referencing>=0.35.1',
                         'falcon>=3.1.3',
                         'hjson>=3.1.0',
                         'PyYaml>=6.0.1',
