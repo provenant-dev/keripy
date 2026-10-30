@@ -133,7 +133,7 @@ class Verifier:
                 self.cues.append(dict(kin="query", q=dict(r="schema", said=schema)))
             raise kering.MissingSchemaError("schema {} not in cache".format(schema))
 
-        schemer = scheming.Schemer(raw=scraw)
+        schemer = scheming.Schemer(raw=scraw, resolver=self.resolver)
         try:
             schemer.verify(creder.raw)
         except kering.ValidationError as ex:
