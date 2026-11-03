@@ -49,6 +49,65 @@ def test_ipex_notifications_only_for_remote_senders():
         }
 
 
+def test_ipex_grant_between_two_local_aids_notifies_grantee():
+    """ FAILING: an IPEX grant between two AIDs of one Habery raises no notification
+
+    A KERIA agent is a single Habery holding every AID of a wallet, served by a
+    single Notifier.  When one AID of the wallet grants a credential to another AID
+    of the same wallet, that one environment is the grantee as well as the granter,
+    so the elision added in a18ab5da, which drops the notification whenever the
+    sender of the exn is a local hab, drops the only notification the grantee would
+    ever receive.  The grant is accepted into the database, no note is raised, the
+    client never sees the grant and the credential can never be admitted.
+
+    Expected: one /exn/ipex/grant note for the grantee.
+    Actual on v1.2.15: `assert 0 == 1`, notifier.getNotes() == [].
+
+    """
+    salt = core.Salter(raw=b'0123456789abcdef').qb64
+    with habbing.openHby(name="wallet", base="test", salt=salt) as hby:
+        # Two AIDs in the one wallet, e.g. a legal entity and a group of its managers
+        granterHab = hby.makeHab(name="granter")
+        granteeHab = hby.makeHab(name="grantee")
+        assert granterHab.pre != granteeHab.pre
+        assert granterHab.pre in hby.habs  # both are local to this Habery
+        assert granteeHab.pre in hby.habs
+
+        notifier = notifying.Notifier(hby=hby)
+        exc = exchanging.Exchanger(hby=hby, handlers=[])
+        protocoling.loadHandlers(hby=hby, exc=exc, notifier=notifier)
+
+        creder = credential(issuer=granterHab.pre,
+                            schema="EMQWEcCnVRk1hatTNyK3sIykYSrrFvafX3bHQ9Gkk1kC",
+                            data=dict(LEI="254900OPPU84GM83MG36"),
+                            recipient=granteeHab.pre)
+
+        grant, gatc = protocoling.ipexGrantExn(granterHab, message="Here's a credential",
+                                               recp=granteeHab.pre, acdc=creder.raw)
+        assert grant.ked["i"] == granterHab.pre  # sender is local
+        assert grant.ked["a"]["i"] == granteeHab.pre  # and so is the recipient
+
+        # Parse the grant the way KERIA does when the grant is submitted, see
+        # IpexGrantCollectionEnd.sendGrant() calling agent.parser.parseOne()
+        gmsg = bytearray(grant.raw)
+        gmsg.extend(gatc)
+        parsing.Parser().parse(ims=gmsg, exc=exc)
+
+        # The grant is accepted into the local environment ...
+        serder = hby.db.exns.get(keys=(grant.said,))
+        assert serder is not None
+        assert serder.ked == grant.ked
+
+        # ... but the grantee is never told about it, so the credential is never admitted
+        notes = notifier.getNotes()
+        assert len(notes) == 1
+        assert notes[0].attrs == {
+            "r": "/exn/ipex/grant",
+            "d": grant.said,
+            "m": "Here's a credential",
+        }
+
+
 def test_ipex(seeder, mockCoringRandomNonce, mockHelpingNowIso8601, mockHelpingNowUTC):
     """ Test IPEX exchange protocol """
 
